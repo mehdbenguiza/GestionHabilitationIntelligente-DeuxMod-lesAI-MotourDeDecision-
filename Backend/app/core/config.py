@@ -1,11 +1,13 @@
+# app/core/config.py
+
 from pydantic_settings import BaseSettings
-from typing import Optional
+from typing import Optional, List
 from pathlib import Path
 import os
 from dotenv import load_dotenv
 
 # Chemin vers le .env dans app/
-env_path = Path(__file__).parent.parent / ".env"  # app/core/config.py -> app/.env
+env_path = Path(__file__).parent.parent / ".env"
 print(f"🔍 Chargement du .env depuis: {env_path}")
 
 if env_path.exists():
@@ -38,15 +40,24 @@ class Settings(BaseSettings):
     EMAIL_FROM: str = os.getenv("EMAIL_FROM", "noreply@biat-it.com.tn")
     ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
     
-    # ✅ NOUVEAU : Configuration iTop
+    # Configuration iTop
     ITOP_API_URL: str = os.getenv("ITOP_API_URL", "")
     ITOP_USERNAME: str = os.getenv("ITOP_USERNAME", "")
     ITOP_PASSWORD: str = os.getenv("ITOP_PASSWORD", "")
+    
+    # CORS (ajouté pour centraliser)
+    CORS_ORIGINS: List[str] = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
 
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
         extra = "ignore"
+        case_sensitive = False
 
 settings = Settings()
 

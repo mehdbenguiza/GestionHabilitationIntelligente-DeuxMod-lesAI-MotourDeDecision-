@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from "react-router-dom";
-import { Search, Bell, User, LogOut, ChevronDown } from 'lucide-react';
+import { Search, Bell, User, LogOut, ChevronDown, AlertCircle } from 'lucide-react';
 import { BiatLogo } from './BiatLogo';
 import { useSidebar } from '../contexts/SidebarContext';
 
@@ -32,14 +32,14 @@ export function Topbar() {
   // États existants
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [notifications, setNotifications] = useState(mockNotifications);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
 
   const profileRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
-  // ==================== FETCH DU USER CONNECTÉ ====================
+  // ==================== FETCH DU USER CONNECTÉ & NOTIFICATIONS ====================
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (!token) {
@@ -48,6 +48,7 @@ export function Topbar() {
       return;
     }
 
+    // Fetch user info
     fetch('http://127.0.0.1:8000/users/me', {
       method: 'GET',
       headers: {
@@ -68,6 +69,27 @@ export function Topbar() {
         setUserName('Erreur de chargement');
         setLoadingUser(false);
       });
+
+    // Fetch notifications
+    const fetchNotifications = () => {
+      fetch('http://127.0.0.1:8000/notifications/', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+      .then(res => res.json())
+      .then(data => {
+         if (Array.isArray(data)) setNotifications(data);
+      })
+      .catch(console.error);
+    };
+
+    fetchNotifications();
+    const intervalId = setInterval(fetchNotifications, 15000); // Polling toutes les 15s
+
+    return () => clearInterval(intervalId);
   }, []);
 
   // ==================== FERMETURE DES MENUS ====================
@@ -85,7 +107,18 @@ export function Topbar() {
   }, []);
 
   const markAllAsRead = () => {
-    setNotifications(notifications.map(n => ({ ...n, read: true })));
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    fetch('http://127.0.0.1:8000/notifications/read-all', {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    }).then(() => {
+      setNotifications(notifications.map(n => ({ ...n, read: true })));
+    }).catch(console.error);
   };
 
   return (
@@ -131,7 +164,61 @@ export function Topbar() {
             {/* Dropdown Notifications */}
             {showNotifications && (
               <div className="absolute right-0 top-12 w-[350px] bg-white rounded-xl shadow-2xl border border-[#E2E8F0] overflow-hidden z-50">
-                {/* ... ton code notifications reste identique ... */}
+                <div className="p-4 border-b border-[#E2E8F0] flex items-center justify-between bg-[#F8FAFC]">
+                  <h3 className="font-semibold text-[#1E2937]">Notifications</h3>
+                  {unreadCount > 0 && (
+                    <button 
+                      onClick={markAllAsRead}
+                      className="text-xs text-[#003087] font-medium hover:underline px-2 py-1 hover:bg-blue-50 rounded transition-colors"
+                    >
+                      Tout marquer comme lu
+                    </button>
+                  )}
+                </div>
+                <div className="max-h-[400px] overflow-y-auto">
+                  {notifications.length === 0 ? (
+                    <div className="p-8 text-center text-[#64748B]">
+                      <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-3">
+                        <Bell size={20} className="text-gray-400" />
+                      </div>
+                      <p className="text-sm">Aucune notification</p>
+                    </div>
+                  ) : (
+                    notifications.map((notif: any) => (
+                      <div 
+                        key={notif.id} 
+                        className={`p-4 border-b border-[#E2E8F0] last:border-0 hover:bg-[#F8FAFC] transition-colors cursor-pointer ${
+                          !notif.read ? 'bg-blue-50/30' : ''
+                        }`}
+                      >
+                        <div className="flex gap-3">
+                          <div className={`mt-1 flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
+                            notif.type === 'danger' ? 'bg-red-100 text-red-600' :
+                            notif.type === 'warning' ? 'bg-amber-100 text-amber-600' :
+                            notif.type === 'success' ? 'bg-green-100 text-green-600' :
+                            'bg-blue-100 text-blue-600'
+                          }`}>
+                            <AlertCircle size={16} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-sm text-[#1E2937] ${!notif.read ? 'font-semibold' : ''}`}>
+                              {notif.title}
+                            </p>
+                            <p className="text-xs text-[#64748B] mt-1 line-clamp-2">
+                              {notif.message}
+                            </p>
+                            <p className="text-[10px] text-[#94A3B8] mt-2">
+                              {notif.timestamp ? new Date(notif.timestamp).toLocaleString('fr-FR') : 'À l\'instant'}
+                            </p>
+                          </div>
+                          {!notif.read && (
+                            <div className="w-2 h-2 bg-[#003087] rounded-full mt-2"></div>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
             )}
           </div>

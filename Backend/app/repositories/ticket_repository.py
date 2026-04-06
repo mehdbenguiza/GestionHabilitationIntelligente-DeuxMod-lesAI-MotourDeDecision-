@@ -11,27 +11,18 @@ class TicketRepository(BaseRepository[Ticket]):
         super().__init__(db, Ticket)
 
     def get_by_ref(self, ref: str) -> Optional[Ticket]:
-        """Récupère un ticket par sa référence"""
         return self.db.query(Ticket).filter(Ticket.ref == ref).first()
 
     def get_by_status(self, status: TicketStatus, skip: int = 0, limit: int = 100) -> List[Ticket]:
-        """Récupère les tickets par statut"""
         return self.db.query(Ticket).filter(Ticket.status == status).offset(skip).limit(limit).all()
 
     def get_by_team(self, team_name: str, skip: int = 0, limit: int = 100) -> List[Ticket]:
-        """Récupère les tickets par équipe"""
         return self.db.query(Ticket).filter(Ticket.team_name == team_name).offset(skip).limit(limit).all()
 
-    def get_assigned_to(self, assigned_to: str, skip: int = 0, limit: int = 100) -> List[Ticket]:
-        """Récupère les tickets assignés à un rôle"""
-        return self.db.query(Ticket).filter(Ticket.assigned_to == assigned_to).offset(skip).limit(limit).all()
-
     def update_status(self, ticket_id: int, status: TicketStatus) -> Optional[Ticket]:
-        """Met à jour le statut d'un ticket"""
         return self.update(ticket_id, {"status": status})
 
     def reject_ticket(self, ticket_id: int, reason: str, rejected_by: str) -> Optional[Ticket]:
-        """Rejette un ticket avec motif"""
         return self.update(ticket_id, {
             "status": TicketStatus.REJECTED,
             "rejected_reason": reason,
@@ -40,21 +31,11 @@ class TicketRepository(BaseRepository[Ticket]):
         })
 
     def approve_ticket(self, ticket_id: int) -> Optional[Ticket]:
-        """Approuve un ticket"""
         return self.update(ticket_id, {"status": TicketStatus.APPROVED})
 
     def assign_ticket(self, ticket_id: int, assigned_to: str) -> Optional[Ticket]:
-        """Assigne un ticket à un rôle"""
         return self.update(ticket_id, {
             "status": TicketStatus.ASSIGNED,
             "assigned_to": assigned_to,
             "assigned_at": datetime.utcnow()
         })
-
-    def count_by_status(self, status: TicketStatus) -> int:
-        """Compte les tickets par statut"""
-        return self.db.query(Ticket).filter(Ticket.status == status).count()
-
-    def count_by_team(self, team_name: str) -> int:
-        """Compte les tickets par équipe"""
-        return self.db.query(Ticket).filter(Ticket.team_name == team_name).count()

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Download, Eye, RefreshCw, XCircle } from 'lucide-react';
+import { Search, Download, Eye, RefreshCw, XCircle, Brain } from 'lucide-react';
 import { Badge } from '../components/ui/badge';
 
 interface Ticket {
@@ -18,7 +18,10 @@ interface Ticket {
   rejected_reason?: string;
   rejected_by?: string;
   rejected_at?: string;
-  assigned_to?: string;  // ✅ NOUVEAU : champ d'assignation
+  assigned_to?: string;
+  // ✅ NOUVEAUX CHAMPS IA
+  ai_level?: string;
+  ai_confidence?: number;
 }
 
 interface UserInfo {
@@ -38,7 +41,6 @@ export function TicketsPage() {
 
   const token = localStorage.getItem('token');
 
-  // Récupérer les infos de l'utilisateur connecté
   const fetchUserInfo = async () => {
     if (!token) return;
     try {
@@ -54,7 +56,6 @@ export function TicketsPage() {
     }
   };
 
-  // Récupérer les tickets depuis le backend
   const fetchTickets = async () => {
     if (!token) {
       setError('Non authentifié');
@@ -63,7 +64,7 @@ export function TicketsPage() {
     }
 
     try {
-      const response = await fetch('http://127.0.0.1:8000/tickets', {
+      const response = await fetch('http://127.0.0.1:8000/tickets/', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -88,18 +89,9 @@ export function TicketsPage() {
     fetchTickets();
   }, []);
 
-  // Filtrer les tickets selon le rôle de l'utilisateur
   const filterTicketsByRole = (tickets: Ticket[]): Ticket[] => {
     if (!userInfo) return tickets;
-    
-    // Super Admin voit TOUS les tickets
-    if (userInfo.role === 'SUPER_ADMIN') {
-      return tickets;
-    }
-    
-    // Admin voit seulement :
-    // 1. Les tickets qui lui sont assignés (assigned_to === 'ADMIN')
-    // 2. Les tickets en attente non encore assignés (pour qu'il puisse les traiter)
+    if (userInfo.role === 'SUPER_ADMIN') return tickets;
     return tickets.filter(ticket => 
       ticket.assigned_to === 'ADMIN' || 
       (ticket.status === 'NEW' && !ticket.assigned_to)
@@ -107,6 +99,11 @@ export function TicketsPage() {
   };
 
   const getNiveauAcces = (ticket: Ticket): string => {
+    // Priorité au niveau IA s'il existe
+    if (ticket.ai_level) {
+      return ticket.ai_level === 'BASE' ? 'Base' : 
+             ticket.ai_level === 'SENSITIVE' ? 'Sensible' : 'Critique';
+    }
     const details = ticket.requested_access_details;
     if (details && details.criticite) {
       return details.criticite === 'CRITIQUE' ? 'Critique' : 
@@ -132,7 +129,6 @@ export function TicketsPage() {
                          ticket.team_name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatut = filterStatut === 'all' || getStatutFrancais(ticket.status) === filterStatut;
     const matchesNiveau = filterNiveau === 'all' || getNiveauAcces(ticket) === filterNiveau;
-    
     return matchesSearch && matchesStatut && matchesNiveau;
   });
 
@@ -152,6 +148,28 @@ export function TicketsPage() {
       case 'Rejeté': return 'bg-red-100 text-red-800 border-red-300';
       case 'Assigné': return 'bg-orange-100 text-orange-800 border-orange-300';
       default: return 'bg-gray-100 text-gray-800 border-gray-300';
+    }
+  };
+
+  // ✅ CORRECTION : Gérer le cas où level est undefined
+  const getAIBadgeColor = (level: string | undefined) => {
+    if (!level) return 'bg-gray-100 text-gray-800 border-gray-300';
+    switch (level) {
+      case 'BASE': return 'bg-green-100 text-green-800 border-green-300';
+      case 'SENSITIVE': return 'bg-amber-100 text-amber-800 border-amber-300';
+      case 'CRITICAL': return 'bg-red-100 text-red-800 border-red-300';
+      default: return 'bg-gray-100 text-gray-800 border-gray-300';
+    }
+  };
+
+  // ✅ CORRECTION : Gérer le cas où level est undefined
+  const getAIFr = (level: string | undefined) => {
+    if (!level) return '-';
+    switch (level) {
+      case 'BASE': return 'Base';
+      case 'SENSITIVE': return 'Sensible';
+      case 'CRITICAL': return 'Critique';
+      default: return level;
     }
   };
 
@@ -259,23 +277,15 @@ export function TicketsPage() {
 
         <div className="mt-4 flex justify-between items-center">
           <div className="flex gap-2">
-            <button
-              onClick={syncTickets}
-              className="flex items-center gap-2 px-4 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg hover:bg-[#E2E8F0] transition-colors"
-            >
-              <RefreshCw size={18} />
-              Synchroniser iTop
+            <button onClick={syncTickets} className="flex items-center gap-2 px-4 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg hover:bg-[#E2E8F0] transition-colors">
+              <RefreshCw size={18} /> Synchroniser iTop
             </button>
-            <button
-              onClick={createTestTicket}
-              className="flex items-center gap-2 px-4 py-2 bg-[#F59E0B] text-white rounded-lg hover:bg-[#D97706] transition-colors"
-            >
-              + Ticket Test
+            <button onClick={createTestTicket} className="flex items-center gap-2 px-4 py-2 bg-[#F59E0B] text-white rounded-lg hover:bg-[#D97706] transition-colors">
+              <Brain size={18} /> + Ticket Test
             </button>
           </div>
           <button className="flex items-center gap-2 px-4 py-2 bg-[#003087] text-white rounded-lg hover:bg-[#002066] transition-colors">
-            <Download size={18} />
-            Exporter CSV
+            <Download size={18} /> Exporter CSV
           </button>
         </div>
       </div>
@@ -285,16 +295,15 @@ export function TicketsPage() {
           <table className="w-full">
             <thead className="bg-[#F8FAFC]">
               <tr className="border-b border-[#E2E8F0]">
-                <th className="text-left py-4 px-6 text-sm font-semibold text-[#64748B]">Réf. Ticket</th>
+                <th className="text-left py-4 px-6 text-sm font-semibold text-[#64748B]">Réf.</th>
                 <th className="text-left py-4 px-6 text-sm font-semibold text-[#64748B]">Demandeur</th>
                 <th className="text-left py-4 px-6 text-sm font-semibold text-[#64748B]">Équipe</th>
-                <th className="text-left py-4 px-6 text-sm font-semibold text-[#64748B]">Environnements</th>
-                <th className="text-left py-4 px-6 text-sm font-semibold text-[#64748B]">Niveau</th>
+                <th className="text-left py-4 px-6 text-sm font-semibold text-[#64748B]">Niveau IA</th>
+                <th className="text-left py-4 px-6 text-sm font-semibold text-[#64748B]">Confiance</th>
                 <th className="text-left py-4 px-6 text-sm font-semibold text-[#64748B]">Statut</th>
-                <th className="text-left py-4 px-6 text-sm font-semibold text-[#64748B]">Motif</th>
                 <th className="text-left py-4 px-6 text-sm font-semibold text-[#64748B]">Date</th>
                 <th className="text-left py-4 px-6 text-sm font-semibold text-[#64748B]">Actions</th>
-                </tr>
+              </tr>
             </thead>
             <tbody>
               {filteredTickets.map((ticket) => (
@@ -303,34 +312,16 @@ export function TicketsPage() {
                   <td className="py-4 px-6 text-[#1E2937]">{ticket.employee_name}</td>
                   <td className="py-4 px-6 text-[#64748B]">{ticket.team_name}</td>
                   <td className="py-4 px-6">
-                    <div className="flex gap-1 flex-wrap">
-                      {ticket.requested_environments?.map((env) => (
-                        <Badge key={env} className="bg-blue-50 text-blue-700 border-blue-200 border text-xs">
-                          {env}
-                        </Badge>
-                      ))}
-                    </div>
-                  </td>
-                  <td className="py-4 px-6">
-                    <Badge className={`${getNiveauBadgeColor(getNiveauAcces(ticket))} border`}>
-                      {getNiveauAcces(ticket)}
+                    <Badge className={`${getAIBadgeColor(ticket.ai_level)} border`}>
+                      <Brain size={12} className="mr-1 inline" />
+                      {getAIFr(ticket.ai_level)}
                     </Badge>
                   </td>
+                  <td className="py-4 px-6 text-[#64748B]">{ticket.ai_confidence ? `${ticket.ai_confidence}%` : '-'}</td>
                   <td className="py-4 px-6">
                     <Badge className={`${getStatutBadgeColor(getStatutFrancais(ticket.status))} border`}>
                       {getStatutFrancais(ticket.status)}
                     </Badge>
-                  </td>
-                  <td className="py-4 px-6">
-                    {ticket.status === 'REJECTED' && ticket.rejected_reason ? (
-                      <span 
-                        className="cursor-help text-red-600 text-sm flex items-center gap-1"
-                        title={ticket.rejected_reason}
-                      >
-                        <XCircle size={14} />
-                        Voir motif
-                      </span>
-                    ) : '-'}
                   </td>
                   <td className="py-4 px-6 text-[#64748B] text-sm">
                     {new Date(ticket.created_at).toLocaleDateString('fr-FR')}
@@ -351,9 +342,7 @@ export function TicketsPage() {
         </div>
 
         {filteredTickets.length === 0 && !loading && (
-          <div className="text-center py-12 text-[#64748B]">
-            Aucun ticket trouvé
-          </div>
+          <div className="text-center py-12 text-[#64748B]">Aucun ticket trouvé</div>
         )}
 
         <div className="p-4 bg-[#F8FAFC] border-t border-[#E2E8F0] flex items-center justify-between">

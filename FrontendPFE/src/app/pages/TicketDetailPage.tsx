@@ -28,7 +28,14 @@ interface Ticket {
   rejected_reason?: string;
   rejected_by?: string;
   rejected_at?: string;
-  assigned_to?: string;  // ✅ NOUVEAU : champ d'assignation
+  assigned_to?: string;
+  ai_level?: string;
+  ai_confidence?: number;
+  ai_probabilities?: {
+    BASE: number;
+    SENSITIVE: number;
+    CRITICAL: number;
+  };
 }
 
 interface UserInfo {
@@ -50,7 +57,6 @@ export function TicketDetailPage() {
 
   const token = localStorage.getItem('token');
 
-  // Récupérer les infos de l'utilisateur connecté
   const fetchUserInfo = async () => {
     if (!token) return;
     try {
@@ -82,14 +88,54 @@ export function TicketDetailPage() {
       });
 
       if (!response.ok) {
-        if (response.status === 404) {
-          throw new Error('Ticket introuvable');
-        }
+        if (response.status === 404) throw new Error('Ticket introuvable');
         throw new Error('Erreur lors du chargement');
       }
 
       const data = await response.json();
       setTicket(data);
+
+      // Construire l'historique à partir des données disponibles
+      const hist: any[] = [
+        { id: 1, action: 'Ticket créé', acteur: 'Système', details: 'Demande enregistrée', date: data.created_at },
+      ];
+
+      // Ajouter l'entrée IA si on a les données
+      if (data.ai_level) {
+        const niveauFr = data.ai_level === 'BASE' ? 'Base' : data.ai_level === 'SENSITIVE' ? 'Sensible' : 'Critique';
+        hist.push({
+          id: 2,
+          action: 'Analyse IA',
+          acteur: 'Moteur IA',
+          details: `Classification : ${niveauFr} — Confiance : ${data.ai_confidence ?? 0}%`,
+          date: data.classification?.processed_at || data.created_at
+        });
+      }
+
+      // Ajouter l'entrée d'assignation si ticket assigné
+      if (data.assigned_to && data.assigned_at) {
+        const dest = data.assigned_to === 'SUPER_ADMIN' ? 'Super Admin' : data.assigned_to === 'ADMIN' ? 'Admin' : data.assigned_to;
+        hist.push({
+          id: 3,
+          action: 'Assignation automatique',
+          acteur: 'Moteur de décision',
+          details: `Ticket assigné à ${dest}`,
+          date: data.assigned_at
+        });
+      }
+
+      // Ajouter le rejet si applicable
+      if (data.status === 'REJECTED' && data.rejected_at) {
+        hist.push({
+          id: 4,
+          action: 'Ticket rejeté',
+          acteur: data.rejected_by || 'Administrateur',
+          details: `Motif : ${data.rejected_reason || 'Non précisé'}`,
+          date: data.rejected_at
+        });
+      }
+
+      setHistorique(hist);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Une erreur est survenue');
     } finally {
@@ -102,19 +148,12 @@ export function TicketDetailPage() {
     fetchTicket();
   }, [id]);
 
-  // Vérifier si l'utilisateur peut agir sur ce ticket
   const canActOnTicket = (): boolean => {
     if (!ticket || !userInfo) return false;
-    
-    // Super Admin peut agir sur tous les tickets
     if (userInfo.role === 'SUPER_ADMIN') return true;
-    
-    // Admin peut agir sur les tickets qui lui sont assignés
     if (userInfo.role === 'ADMIN') {
-      return ticket.assigned_to === 'ADMIN' || 
-             (ticket.status === 'NEW' && !ticket.assigned_to);
+      return ticket.assigned_to === 'ADMIN' || ticket.assigned_to === 'ADMIN,SUPER_ADMIN' || (ticket.status === 'NEW' && !ticket.assigned_to);
     }
-    
     return false;
   };
 
@@ -124,17 +163,10 @@ export function TicketDetailPage() {
     try {
       const response = await fetch(`http://127.0.0.1:8000/tickets/${ticket.id}/approve`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ resolution: 'Demande approuvée' })
       });
-
-      if (!response.ok) {
-        throw new Error('Erreur lors de l\'approbation');
-      }
-
+      if (!response.ok) throw new Error('Erreur lors de l\'approbation');
       await fetchTicket();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur');
@@ -149,16 +181,9 @@ export function TicketDetailPage() {
     try {
       const response = await fetch(`http://127.0.0.1:8000/tickets/${ticket.id}/reject?reason=${encodeURIComponent(rejectReason)}`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
       });
-
-      if (!response.ok) {
-        throw new Error('Erreur lors du rejet');
-      }
-
+      if (!response.ok) throw new Error('Erreur lors du rejet');
       setShowRejectModal(false);
       await fetchTicket();
     } catch (err) {
@@ -174,16 +199,9 @@ export function TicketDetailPage() {
     try {
       const response = await fetch(`http://127.0.0.1:8000/tickets/${ticket.id}/escalate?escalate_to=SUPER_ADMIN`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
       });
-
-      if (!response.ok) {
-        throw new Error('Erreur lors de l\'escalade');
-      }
-
+      if (!response.ok) throw new Error('Erreur lors de l\'escalade');
       await fetchTicket();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur');
@@ -194,17 +212,15 @@ export function TicketDetailPage() {
 
   const getNiveauAcces = (): string => {
     if (!ticket) return 'Base';
-    const details = ticket.requested_access_details;
-    if (details?.criticite === 'CRITIQUE') return 'Critique';
-    if (details?.criticite === 'SENSIBLE') return 'Sensible';
+    if (ticket.ai_level) {
+      return ticket.ai_level === 'BASE' ? 'Base' : 
+             ticket.ai_level === 'SENSITIVE' ? 'Sensible' : 'Critique';
+    }
     return 'Base';
   };
 
   const getConfianceScore = (): number => {
-    const niveau = getNiveauAcces();
-    if (niveau === 'Base') return 92;
-    if (niveau === 'Sensible') return 78;
-    return 65;
+    return ticket?.ai_confidence || 0;
   };
 
   const getIAExplanation = (): string => {
@@ -251,6 +267,19 @@ export function TicketDetailPage() {
     }
   };
 
+  const getProbabilities = () => {
+    // ✅ Lit directement ai_probabilities depuis le ticket (champ plat renvoyé par l'API)
+    if (ticket?.ai_probabilities && Object.keys(ticket.ai_probabilities).length > 0) {
+      return ticket.ai_probabilities as { BASE: number; SENSITIVE: number; CRITICAL: number };
+    }
+    // Fallback : essayer depuis classification imbriqué
+    const cls = (ticket as any)?.classification;
+    if (cls?.probabilities && Object.keys(cls.probabilities).length > 0) {
+      return cls.probabilities as { BASE: number; SENSITIVE: number; CRITICAL: number };
+    }
+    return null;
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -269,10 +298,7 @@ export function TicketDetailPage() {
           {error || 'Ticket introuvable'}
         </div>
         <div>
-          <button
-            onClick={() => navigate('/tickets')}
-            className="px-4 py-2 bg-[#003087] text-white rounded-lg hover:bg-[#002066]"
-          >
+          <button onClick={() => navigate('/tickets')} className="px-4 py-2 bg-[#003087] text-white rounded-lg hover:bg-[#002066]">
             Retour à la liste
           </button>
         </div>
@@ -281,19 +307,17 @@ export function TicketDetailPage() {
   }
 
   const userCanAct = canActOnTicket();
+  const probabilities = getProbabilities();
 
   return (
     <div className="space-y-6 pb-12">
       <div className="flex items-center gap-4">
-        <button
-          onClick={() => navigate('/tickets')}
-          className="p-2 hover:bg-white rounded-lg transition-colors"
-        >
+        <button onClick={() => navigate('/tickets')} className="p-2 hover:bg-white rounded-lg transition-colors">
           <ArrowLeft size={24} className="text-[#64748B]" />
         </button>
         <div className="flex-1">
           <h1 className="text-3xl font-bold text-[#1E2937] mb-2">Détail du Ticket</h1>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <span className="text-xl font-semibold text-[#003087]">{ticket.ref}</span>
             <Badge className={`${getStatutBadgeColor(ticket.status)} border`}>
               {getStatutFrancais(ticket.status)}
@@ -303,13 +327,15 @@ export function TicketDetailPage() {
                 Assigné à: {ticket.assigned_to === 'SUPER_ADMIN' ? 'Super Admin' : 'Admin'}
               </Badge>
             )}
+            {ticket.ai_level && (
+              <Badge className={`${getNiveauBadgeColor(getNiveauAcces())} border`}>
+                <Brain size={14} className="mr-1 inline" />
+                IA: {getNiveauAcces()} ({getConfianceScore()}%)
+              </Badge>
+            )}
           </div>
         </div>
-        <button
-          onClick={fetchTicket}
-          className="p-2 hover:bg-white rounded-lg transition-colors"
-          title="Actualiser"
-        >
+        <button onClick={fetchTicket} className="p-2 hover:bg-white rounded-lg transition-colors" title="Actualiser">
           <RefreshCw size={20} className="text-[#64748B]" />
         </button>
       </div>
@@ -332,60 +358,24 @@ export function TicketDetailPage() {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Colonne principale - inchangée */}
         <div className="lg:col-span-2 space-y-6">
+          {/* Informations demandeur - inchangé */}
           <div className="bg-white rounded-xl p-6 border border-[#E2E8F0] shadow-sm">
             <h2 className="text-xl font-bold text-[#1E2937] mb-6 flex items-center gap-2">
               <User className="text-[#003087]" size={24} />
               Informations Demandeur
             </h2>
             <div className="grid grid-cols-2 gap-6">
-              <div>
-                <div className="text-sm text-[#64748B] mb-1">Nom complet</div>
-                <div className="text-[#1E2937] font-semibold">{ticket.employee_name}</div>
-              </div>
-              <div>
-                <div className="text-sm text-[#64748B] mb-1">Email</div>
-                <div className="text-[#1E2937] font-semibold flex items-center gap-2">
-                  <Mail size={16} />
-                  {ticket.employee_email}
-                </div>
-              </div>
-              <div>
-                <div className="text-sm text-[#64748B] mb-1">Équipe</div>
-                <div className="text-[#1E2937] font-semibold flex items-center gap-2">
-                  <Users size={16} />
-                  {ticket.team_name}
-                </div>
-              </div>
-              <div>
-                <div className="text-sm text-[#64748B] mb-1">Rôle</div>
-                <div className="text-[#1E2937] font-semibold flex items-center gap-2">
-                  <Briefcase size={16} />
-                  {ticket.role || 'Non spécifié'}
-                </div>
-              </div>
-              <div>
-                <div className="text-sm text-[#64748B] mb-1">Date de création</div>
-                <div className="text-[#1E2937] font-semibold flex items-center gap-2">
-                  <Calendar size={16} />
-                  {new Date(ticket.created_at).toLocaleString('fr-FR')}
-                </div>
-              </div>
-              <div>
-                <div className="text-sm text-[#64748B] mb-1">Environnements</div>
-                <div className="flex gap-1 flex-wrap">
-                  {ticket.requested_environments?.map((env) => (
-                    <Badge key={env} className="bg-blue-50 text-blue-700 border-blue-200 border">
-                      <Server size={12} className="mr-1" />
-                      {env}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
+              <div><div className="text-sm text-[#64748B] mb-1">Nom complet</div><div className="text-[#1E2937] font-semibold">{ticket.employee_name}</div></div>
+              <div><div className="text-sm text-[#64748B] mb-1">Email</div><div className="text-[#1E2937] font-semibold flex items-center gap-2"><Mail size={16} />{ticket.employee_email}</div></div>
+              <div><div className="text-sm text-[#64748B] mb-1">Équipe</div><div className="text-[#1E2937] font-semibold flex items-center gap-2"><Users size={16} />{ticket.team_name}</div></div>
+              <div><div className="text-sm text-[#64748B] mb-1">Rôle</div><div className="text-[#1E2937] font-semibold flex items-center gap-2"><Briefcase size={16} />{ticket.role || 'Non spécifié'}</div></div>
+              <div><div className="text-sm text-[#64748B] mb-1">Date de création</div><div className="text-[#1E2937] font-semibold flex items-center gap-2"><Calendar size={16} />{new Date(ticket.created_at).toLocaleString('fr-FR')}</div></div>
+              <div><div className="text-sm text-[#64748B] mb-1">Environnements</div><div className="flex gap-1 flex-wrap">{ticket.requested_environments?.map((env) => (<Badge key={env} className="bg-blue-50 text-blue-700 border-blue-200 border"><Server size={12} className="mr-1" />{env}</Badge>))}</div></div>
             </div>
           </div>
 
+          {/* Analyse IA - AVEC DONNÉES RÉELLES */}
           <div className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-xl p-6 border border-purple-200 shadow-sm">
             <h2 className="text-xl font-bold text-[#1E2937] mb-6 flex items-center gap-2">
               <Brain className="text-[#003087]" size={24} />
@@ -411,6 +401,18 @@ export function TicketDetailPage() {
                 </div>
                 <Progress value={getConfianceScore()} className="h-3" />
               </div>
+              
+              {probabilities && (
+                <div className="bg-white rounded-lg p-4 border border-purple-200">
+                  <div className="text-sm text-[#64748B] mb-2 font-semibold">Probabilités détaillées</div>
+                  <div className="space-y-2">
+                    <div><div className="flex justify-between text-sm"><span>Base</span><span>{probabilities.BASE}%</span></div><Progress value={probabilities.BASE} className="h-2 bg-gray-200" /></div>
+                    <div><div className="flex justify-between text-sm"><span>Sensible</span><span>{probabilities.SENSITIVE}%</span></div><Progress value={probabilities.SENSITIVE} className="h-2 bg-gray-200" /></div>
+                    <div><div className="flex justify-between text-sm"><span>Critique</span><span>{probabilities.CRITICAL}%</span></div><Progress value={probabilities.CRITICAL} className="h-2 bg-gray-200" /></div>
+                  </div>
+                </div>
+              )}
+              
               <div className="bg-white rounded-lg p-4 border border-purple-200">
                 <div className="text-sm text-[#64748B] mb-2 font-semibold">Explication détaillée</div>
                 <div className="text-[#1E2937]">{getIAExplanation()}</div>
@@ -418,30 +420,14 @@ export function TicketDetailPage() {
             </div>
           </div>
 
+          {/* Accès demandés */}
           <div className="bg-white rounded-xl p-6 border border-[#E2E8F0] shadow-sm">
-            <h2 className="text-xl font-bold text-[#1E2937] mb-6 flex items-center gap-2">
-              <ShieldCheck className="text-[#003087]" size={24} />
-              Accès Demandés
-            </h2>
-            <div className="space-y-3">
-              <div className="p-4 bg-[#F8FAFC] rounded-lg border border-[#E2E8F0]">
-                <div className="font-semibold text-[#1E2937] mb-2">Types d'accès demandés</div>
-                <div className="flex gap-2 flex-wrap">
-                  {ticket.requested_access_details?.access_types?.map((type, idx) => (
-                    <Badge key={idx} className="bg-gray-100 text-gray-700 border-gray-200">
-                      {type}
-                    </Badge>
-                  ))}
-                </div>
-                {ticket.requested_access_details?.justification && (
-                  <>
-                    <div className="font-semibold text-[#1E2937] mt-4 mb-2">Justification</div>
-                    <div className="text-[#64748B]">{ticket.requested_access_details.justification}</div>
-                  </>
-                )}
-                <div className="font-semibold text-[#1E2937] mt-4 mb-2">Description</div>
-                <div className="text-[#64748B]">{ticket.description}</div>
-              </div>
+            <h2 className="text-xl font-bold text-[#1E2937] mb-6 flex items-center gap-2"><ShieldCheck className="text-[#003087]" size={24} />Accès Demandés</h2>
+            <div className="p-4 bg-[#F8FAFC] rounded-lg border border-[#E2E8F0]">
+              <div className="font-semibold text-[#1E2937] mb-2">Types d'accès demandés</div>
+              <div className="flex gap-2 flex-wrap">{ticket.requested_access_details?.access_types?.map((type, idx) => (<Badge key={idx} className="bg-gray-100 text-gray-700 border-gray-200">{type}</Badge>))}</div>
+              {ticket.requested_access_details?.justification && (<><div className="font-semibold text-[#1E2937] mt-4 mb-2">Justification</div><div className="text-[#64748B]">{ticket.requested_access_details.justification}</div></>)}
+              <div className="font-semibold text-[#1E2937] mt-4 mb-2">Description</div><div className="text-[#64748B]">{ticket.description}</div>
             </div>
           </div>
         </div>
@@ -451,76 +437,36 @@ export function TicketDetailPage() {
           <div className="bg-white rounded-xl p-6 border border-[#E2E8F0] shadow-sm">
             <h3 className="text-lg font-bold text-[#1E2937] mb-4">Actions</h3>
             <div className="space-y-3">
-              {ticket.status === 'NEW' && userCanAct && (
+              {(ticket.status === 'NEW' || ticket.status === 'ASSIGNED') && userCanAct && (
                 <>
-                  <button
-                    onClick={handleApprove}
-                    disabled={actionLoading}
-                    className="w-full py-3 bg-[#10B981] text-white rounded-lg font-semibold hover:bg-[#059669] transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
-                  >
-                    <CheckCircle size={20} />
-                    {actionLoading ? 'Traitement...' : 'Approuver'}
+                  <button onClick={handleApprove} disabled={actionLoading} className="w-full py-3 bg-[#10B981] text-white rounded-lg font-semibold hover:bg-[#059669] transition-colors flex items-center justify-center gap-2 disabled:opacity-50">
+                    <CheckCircle size={20} /> {actionLoading ? 'Traitement...' : 'Approuver'}
                   </button>
-                  <button
-                    onClick={() => setShowRejectModal(true)}
-                    disabled={actionLoading}
-                    className="w-full py-3 bg-[#EF4444] text-white rounded-lg font-semibold hover:bg-[#DC2626] transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
-                  >
-                    <XCircle size={20} />
-                    Rejeter
-                  </button>
-                  <button
-                    onClick={handleEscalate}
-                    disabled={actionLoading}
-                    className="w-full py-3 bg-[#F59E0B] text-white rounded-lg font-semibold hover:bg-[#D97706] transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
-                  >
-                    <AlertTriangle size={20} />
-                    Escalader vers Super Admin
+                  <button onClick={() => setShowRejectModal(true)} disabled={actionLoading} className="w-full py-3 bg-[#EF4444] text-white rounded-lg font-semibold hover:bg-[#DC2626] transition-colors flex items-center justify-center gap-2 disabled:opacity-50">
+                    <XCircle size={20} /> Rejeter
                   </button>
                 </>
               )}
-              {ticket.status === 'NEW' && !userCanAct && (
+              {(ticket.status === 'NEW' || ticket.status === 'ASSIGNED') && !userCanAct && (
                 <div className="p-4 bg-gray-50 rounded-lg text-center">
                   <p className="text-gray-600 text-sm">Ce ticket n'est pas assigné à votre rôle</p>
-                  <p className="text-gray-500 text-xs mt-1">
-                    Assigné à: {ticket.assigned_to === 'SUPER_ADMIN' ? 'Super Admin' : 
-                               ticket.assigned_to === 'ADMIN' ? 'Admin' : 'En attente d\'assignation'}
-                  </p>
+                  <p className="text-gray-500 text-xs mt-1">Assigné à: {ticket.assigned_to === 'SUPER_ADMIN' ? 'Super Admin' : ticket.assigned_to?.includes('ADMIN') ? 'Admin' : 'En attente'}</p>
                 </div>
               )}
-              {ticket.status === 'APPROVED' && (
-                <div className="p-4 bg-green-50 rounded-lg text-center">
-                  <CheckCircle className="mx-auto mb-2 text-green-600" size={32} />
-                  <p className="text-green-800 font-semibold">Ticket approuvé</p>
-                  <p className="text-green-600 text-sm">Les accès ont été attribués</p>
-                </div>
-              )}
-              {ticket.status === 'REJECTED' && (
-                <div className="p-4 bg-red-50 rounded-lg text-center">
-                  <XCircle className="mx-auto mb-2 text-red-600" size={32} />
-                  <p className="text-red-800 font-semibold">Ticket rejeté</p>
-                </div>
-              )}
+              {ticket.status === 'APPROVED' && (<div className="p-4 bg-green-50 rounded-lg text-center"><CheckCircle className="mx-auto mb-2 text-green-600" size={32} /><p className="text-green-800 font-semibold">Ticket approuvé</p><p className="text-green-600 text-sm">Les accès ont été attribués</p></div>)}
+              {ticket.status === 'REJECTED' && (<div className="p-4 bg-red-50 rounded-lg text-center"><XCircle className="mx-auto mb-2 text-red-600" size={32} /><p className="text-red-800 font-semibold">Ticket rejeté</p></div>)}
             </div>
           </div>
 
-          {/* Historique */}
           <div className="bg-white rounded-xl p-6 border border-[#E2E8F0] shadow-sm">
-            <h3 className="text-lg font-bold text-[#1E2937] mb-4 flex items-center gap-2">
-              <Clock size={20} />
-              Historique
-            </h3>
+            <h3 className="text-lg font-bold text-[#1E2937] mb-4 flex items-center gap-2"><Clock size={20} />Historique</h3>
             <div className="space-y-4 max-h-[50vh] overflow-y-auto">
               {historique.map((event) => (
                 <div key={event.id} className="relative pl-6 pb-4 border-l-2 border-[#E2E8F0] last:border-0 last:pb-0">
                   <div className="absolute -left-[9px] top-0 w-4 h-4 bg-[#003087] rounded-full border-2 border-white"></div>
-                  <div className="text-xs text-[#64748B] mb-1">
-                    {new Date(event.date).toLocaleString('fr-FR')}
-                  </div>
+                  <div className="text-xs text-[#64748B] mb-1">{new Date(event.date).toLocaleString('fr-FR')}</div>
                   <div className="font-semibold text-[#1E2937] text-sm mb-1">{event.action}</div>
-                  <div className="text-sm text-[#64748B]">
-                    <span className="font-medium">{event.acteur}</span> - {event.details}
-                  </div>
+                  <div className="text-sm text-[#64748B]"><span className="font-medium">{event.acteur}</span> - {event.details}</div>
                 </div>
               ))}
             </div>
@@ -528,33 +474,15 @@ export function TicketDetailPage() {
         </div>
       </div>
 
-      {/* Modal de rejet */}
       {showRejectModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-2xl">
             <h3 className="text-xl font-bold text-[#1E2937] mb-4">Motif de rejet</h3>
-            <p className="text-sm text-[#64748B] mb-4">
-              Veuillez indiquer la raison du rejet de cette demande (obligatoire)
-            </p>
-            <textarea
-              value={rejectReason}
-              onChange={(e) => setRejectReason(e.target.value)}
-              placeholder="Expliquez pourquoi cette demande est rejetée..."
-              className="w-full px-4 py-3 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#EF4444] focus:border-transparent resize-none h-32"
-              required
-            />
+            <p className="text-sm text-[#64748B] mb-4">Veuillez indiquer la raison du rejet de cette demande (obligatoire)</p>
+            <textarea value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} placeholder="Expliquez pourquoi cette demande est rejetée..." className="w-full px-4 py-3 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#EF4444] focus:border-transparent resize-none h-32" required />
             <div className="flex gap-3 mt-6">
-              <button
-                onClick={() => setShowRejectModal(false)}
-                className="flex-1 py-2.5 bg-[#F8FAFC] text-[#64748B] rounded-lg font-semibold hover:bg-[#E2E8F0] transition-colors"
-              >
-                Annuler
-              </button>
-              <button
-                onClick={handleReject}
-                disabled={!rejectReason.trim() || actionLoading}
-                className="flex-1 py-2.5 bg-[#EF4444] text-white rounded-lg font-semibold hover:bg-[#DC2626] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
+              <button onClick={() => setShowRejectModal(false)} className="flex-1 py-2.5 bg-[#F8FAFC] text-[#64748B] rounded-lg font-semibold hover:bg-[#E2E8F0] transition-colors">Annuler</button>
+              <button onClick={handleReject} disabled={!rejectReason.trim() || actionLoading} className="flex-1 py-2.5 bg-[#EF4444] text-white rounded-lg font-semibold hover:bg-[#DC2626] transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                 {actionLoading ? 'Traitement...' : 'Confirmer le rejet'}
               </button>
             </div>

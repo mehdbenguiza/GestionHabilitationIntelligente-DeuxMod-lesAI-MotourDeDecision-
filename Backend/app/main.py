@@ -6,6 +6,13 @@ from app.api.endpoints.users import router as users_router
 from app.api.endpoints.tickets import router as tickets_router   # ← NOUVEAU
 from app.database import engine, Base
 from datetime import datetime
+from app.api.endpoints.ai import router as ai_router
+from app.api.endpoints.notifications import router as notifications_router
+from app.services.ai_service import ai_service
+# Imports des modèles pour forcer la création des tables
+import app.models.notification
+import app.models.classification_result
+import app.models.decision_engine
 
 # Création des tables
 Base.metadata.create_all(bind=engine)
@@ -49,7 +56,9 @@ app.add_middleware(
 # Inclusion des routers
 app.include_router(auth_router)
 app.include_router(users_router)
-app.include_router(tickets_router)   # ← NOUVEAU
+app.include_router(tickets_router)
+app.include_router(ai_router)
+app.include_router(notifications_router)
 
 # Middleware pour logger les requêtes
 @app.middleware("http")
@@ -71,3 +80,11 @@ def root():
 @app.get("/health")
 def health():
     return {"status": "ok", "timestamp": datetime.utcnow().isoformat()}
+@app.on_event("startup")
+async def startup_event():
+    print("🚀 Démarrage de l'application...")
+    success = ai_service.load_models()
+    if success:
+        print("✅ IA chargée avec succès")
+    else:
+        print("❌ Échec du chargement de l'IA")

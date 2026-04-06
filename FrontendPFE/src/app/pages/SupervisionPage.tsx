@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Brain, TrendingUp, AlertCircle, Target, BarChart3, 
   Activity, Settings, Edit, Trash2, CheckCircle, XCircle,
@@ -84,6 +84,39 @@ export function SupervisionPage() {
   const [rules, setRules] = useState(mockAutomationRules);
   const [selectedTimeRange, setSelectedTimeRange] = useState('month');
 
+  // Nouveaux états de données réelles
+  const [realMetrics, setRealMetrics] = useState<any>(null);
+  const [realDecisions, setRealDecisions] = useState<any[]>([]);
+  const [loadingSupervision, setLoadingSupervision] = useState(true);
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    const fetchData = async () => {
+      try {
+        const metricsRes = await fetch('http://127.0.0.1:8000/ai/metrics', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const decisionsRes = await fetch('http://127.0.0.1:8000/ai/decisions', {
+             headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (metricsRes.ok && decisionsRes.ok) {
+           const metrics = await metricsRes.json();
+           const decisions = await decisionsRes.json();
+           setRealMetrics(metrics);
+           setRealDecisions(decisions);
+        }
+      } catch (err) {
+        console.error("Supervision endpoints error:", err);
+      } finally {
+        setLoadingSupervision(false);
+      }
+    };
+    fetchData();
+  }, []);
+
   // Fonction pour ajouter une notification
   const addNotification = (type: Notification['type'], message: string) => {
     const newNotification: Notification = {
@@ -141,7 +174,7 @@ export function SupervisionPage() {
     );
   };
 
-  const filteredDecisions = mockDecisionsIA.filter(decision => {
+  const filteredDecisions = realDecisions.filter(decision => {
     if (filterAnomalie === 'all') return true;
     if (filterAnomalie === 'anomalie') return decision.anomalie;
     if (filterAnomalie === 'normal') return !decision.anomalie;
@@ -166,11 +199,14 @@ export function SupervisionPage() {
     }
   };
 
+  // Maps values correctly if realMetrics existing
+  const autoApprovals = realMetrics?.auto_approve_rate || 0;
+  const precision = realMetrics?.avg_confidence || 80;
+  
   const performanceData = [
-    { metrique: 'Précision', valeur: 94 },
-    { metrique: 'Rappel', valeur: 91 },
-    { metrique: 'F1-Score', valeur: 92 },
-    { metrique: 'Exactitude', valeur: 96 }
+    { metrique: 'Précision', valeur: precision },
+    { metrique: 'Auto-Approvals', valeur: autoApprovals },
+    { metrique: 'Tickets traités', valeur: realMetrics?.total || 0 > 100 ? 100 : realMetrics?.total || 0 }, // fallback representation
   ];
 
   const evolutionPerformance = [
@@ -222,11 +258,11 @@ export function SupervisionPage() {
     }
   ];
 
-  const pieData = [
-    { name: 'Base', value: 45, color: '#10B981' },
-    { name: 'Sensible', value: 35, color: '#F59E0B' },
-    { name: 'Critique', value: 20, color: '#EF4444' }
-  ];
+  const pieData = realMetrics ? [
+    { name: 'Base', value: realMetrics.levels['BASE'] || 0, color: '#10B981' },
+    { name: 'Sensible', value: realMetrics.levels['SENSITIVE'] || 0, color: '#F59E0B' },
+    { name: 'Critique', value: realMetrics.levels['CRITICAL'] || 0, color: '#EF4444' }
+  ] : [];
 
   return (
     <div className="space-y-6 p-6 bg-[#F8FAFC] min-h-screen relative">
@@ -323,9 +359,8 @@ export function SupervisionPage() {
                   </div>
                   <TrendingUp size={20} className="text-[#10B981]" />
                 </div>
-                <div className="text-3xl font-bold text-[#1E2937] mb-1">94%</div>
-                <div className="text-sm text-[#64748B]">Précision globale</div>
-                <div className="mt-2 text-xs text-[#10B981]">+2.5% vs mois dernier</div>
+                <div className="text-3xl font-bold text-[#1E2937] mb-1">{realMetrics ? realMetrics.avg_confidence : 0}%</div>
+                <div className="text-sm text-[#64748B]">Confiance globale moyenne</div>
               </div>
 
               <div className="bg-gradient-to-br from-green-50 to-white rounded-xl p-6 border border-green-100 shadow-sm hover:shadow-md transition-shadow">
@@ -335,9 +370,8 @@ export function SupervisionPage() {
                   </div>
                   <TrendingUp size={20} className="text-[#10B981]" />
                 </div>
-                <div className="text-3xl font-bold text-[#1E2937] mb-1">87%</div>
+                <div className="text-3xl font-bold text-[#1E2937] mb-1">{realMetrics ? realMetrics.auto_approve_rate : 0}%</div>
                 <div className="text-sm text-[#64748B]">Taux d'auto-approbation</div>
-                <div className="mt-2 text-xs text-[#10B981]">+5% vs mois dernier</div>
               </div>
 
               <div className="bg-gradient-to-br from-amber-50 to-white rounded-xl p-6 border border-amber-100 shadow-sm hover:shadow-md transition-shadow">
@@ -346,9 +380,8 @@ export function SupervisionPage() {
                     <Activity size={24} className="text-[#F59E0B]" />
                   </div>
                 </div>
-                <div className="text-3xl font-bold text-[#1E2937] mb-1">236</div>
-                <div className="text-sm text-[#64748B]">Décisions ce mois</div>
-                <div className="mt-2 text-xs text-[#64748B]">Moyenne: 8/jour</div>
+                <div className="text-3xl font-bold text-[#1E2937] mb-1">{realMetrics ? realMetrics.total : 0}</div>
+                <div className="text-sm text-[#64748B]">Décisions IA globales</div>
               </div>
 
               <div className="bg-gradient-to-br from-red-50 to-white rounded-xl p-6 border border-red-100 shadow-sm hover:shadow-md transition-shadow">
@@ -357,9 +390,8 @@ export function SupervisionPage() {
                     <AlertCircle size={24} className="text-[#EF4444]" />
                   </div>
                 </div>
-                <div className="text-3xl font-bold text-[#1E2937] mb-1">{anomaliesRecentes.length}</div>
+                <div className="text-3xl font-bold text-[#1E2937] mb-1">{filteredDecisions.filter(d => d.anomalie).length}</div>
                 <div className="text-sm text-[#64748B]">Anomalies détectées</div>
-                <div className="mt-2 text-xs text-[#EF4444]">-2 vs semaine dernière</div>
               </div>
             </div>
           </div>
@@ -405,12 +437,12 @@ export function SupervisionPage() {
 
               {/* Évolution de la performance */}
               <div className="bg-white rounded-xl p-4 border border-[#E2E8F0]">
-                <h3 className="text-lg font-semibold text-[#1E2937] mb-4">Évolution de la Performance</h3>
+                <h3 className="text-lg font-semibold text-[#1E2937] mb-4">Évolution Temporelle (Tickets analysés par jour)</h3>
                 <ResponsiveContainer width="100%" height={300}>
-                  <LineChart data={evolutionPerformance}>
+                  <LineChart data={realMetrics?.daily_stats || []}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
-                    <XAxis dataKey="semaine" stroke="#64748B" style={{ fontSize: '12px' }} />
-                    <YAxis stroke="#64748B" style={{ fontSize: '12px' }} domain={[80, 100]} />
+                    <XAxis dataKey="date" stroke="#64748B" style={{ fontSize: '10px' }} />
+                    <YAxis stroke="#64748B" style={{ fontSize: '12px' }} />
                     <Tooltip 
                       contentStyle={{ 
                         backgroundColor: '#fff', 
@@ -420,8 +452,7 @@ export function SupervisionPage() {
                       }} 
                     />
                     <Legend />
-                    <Line type="monotone" dataKey="precision" stroke="#003087" strokeWidth={3} dot={{ fill: '#003087', r: 5 }} name="Précision" />
-                    <Line type="monotone" dataKey="rappel" stroke="#00AEEF" strokeWidth={3} dot={{ fill: '#00AEEF', r: 5 }} name="Rappel" />
+                    <Line type="monotone" dataKey="count" stroke="#003087" strokeWidth={3} dot={{ fill: '#003087', r: 3 }} name="Décisions" />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
@@ -698,21 +729,22 @@ export function SupervisionPage() {
               </tr>
             </thead>
             <tbody>
-              {filteredDecisions.map((decision) => (
-                <tr key={decision.id} className="border-b border-[#E2E8F0] hover:bg-[#F8FAFC] transition-colors">
+              {filteredDecisions.map((decision, idx) => (
+                <tr key={decision.id || idx} className="border-b border-[#E2E8F0] hover:bg-[#F8FAFC] transition-colors">
                   <td className="py-4 px-6 font-semibold text-[#003087]">{decision.ticketRef}</td>
                   <td className="py-4 px-6">
-                    <Badge className={`${getNiveauBadgeColor(decision.niveauPredit)} border`}>
+                    <Badge className={`${getNiveauBadgeColor(decision.niveauPredit == 'BASE' ? 'Base' : decision.niveauPredit == 'SENSITIVE' ? 'Sensible' : 'Critique')} border`}>
                       {decision.niveauPredit}
                     </Badge>
                   </td>
                   <td className="py-4 px-6">
-                    <Badge className={`${getNiveauBadgeColor(decision.niveauReel)} border`}>
+                    <Badge className={`${getNiveauBadgeColor(decision.niveauReel == 'BASE' ? 'Base' : decision.niveauReel == 'SENSITIVE' ? 'Sensible' : 'Critique')} border`}>
                       {decision.niveauReel}
                     </Badge>
                   </td>
                   <td className="py-4 px-6">
                     <div className="flex items-center gap-2">
+                       {/* Make sure we can handle real number */}
                       <div className={`font-bold ${
                         decision.scoreConfiance > 80 ? 'text-[#10B981]' : 
                         decision.scoreConfiance > 50 ? 'text-[#F59E0B]' : 
@@ -737,7 +769,7 @@ export function SupervisionPage() {
                     )}
                   </td>
                   <td className="py-4 px-6 text-[#64748B] text-sm">
-                    {decision.date.toLocaleDateString('fr-FR')}
+                    {decision.date ? new Date(decision.date).toLocaleDateString('fr-FR') : '-'}
                   </td>
                 </tr>
               ))}

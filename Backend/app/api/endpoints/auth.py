@@ -59,6 +59,21 @@ def login(
     
     # Stocker le refresh token en base (pour révocation)
     user.refresh_token = refresh_token
+    
+    # Notification s'il est admin
+    if user.role.value in ["SUPER_ADMIN", "ADMIN"]:
+        from app.models.notification import Notification
+        display_name = user.fullName if user.fullName else user.username
+        role_display = "Super Admin" if user.role.value == "SUPER_ADMIN" else "Admin"
+        
+        notif = Notification(
+            title=f"Connexion: {role_display}",
+            message=f"{role_display} {display_name} vient de se connecter au dashboard.",
+            type="info",
+            target_roles="SUPER_ADMIN"
+        )
+        db.add(notif)
+    
     db.commit()
     
     # ✅ Stocker le refresh token en HttpOnly Cookie

@@ -1,6 +1,6 @@
 # app/models/ticket.py
 
-from sqlalchemy import Column, Integer, String, DateTime, Text, JSON, Enum, Boolean
+from sqlalchemy import Column, Integer, String, DateTime, Text, JSON, Enum
 from sqlalchemy.sql import func
 from app.database import Base
 import enum
@@ -31,7 +31,11 @@ class Ticket(Base):
     requested_environments = Column(JSON)
     requested_access_details = Column(JSON)
     
-    # ✅ NOUVEAU : Motif de rejet
+    # Champs d'assignation
+    assigned_to = Column(String(50), nullable=True)
+    assigned_at = Column(DateTime(timezone=True), nullable=True)
+    
+    # Motif de rejet
     rejected_reason = Column(Text, nullable=True)
     rejected_at = Column(DateTime(timezone=True), nullable=True)
     rejected_by = Column(String(100), nullable=True)
