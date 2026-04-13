@@ -95,10 +95,10 @@ export function SupervisionPage() {
 
     const fetchData = async () => {
       try {
-        const metricsRes = await fetch('http://127.0.0.1:8000/ai/metrics', {
+        const metricsRes = await fetch('http://127.0.0.1:8000/ai/metrics?v=2', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
-        const decisionsRes = await fetch('http://127.0.0.1:8000/ai/decisions', {
+        const decisionsRes = await fetch('http://127.0.0.1:8000/ai/decisions?v=2', {
              headers: { 'Authorization': `Bearer ${token}` }
         });
         

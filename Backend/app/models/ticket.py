@@ -1,6 +1,7 @@
 # app/models/ticket.py
 
-from sqlalchemy import Column, Integer, String, DateTime, Text, JSON, Enum
+from sqlalchemy import Column, Integer, String, DateTime, Text, JSON, Enum, Float
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
 import enum
@@ -44,3 +45,14 @@ class Ticket(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     synced_at = Column(DateTime(timezone=True))
+
+    # ✅ Relation avec le moteur IA
+    classification = relationship("ClassificationResult", backref="ticket", uselist=False, cascade="all, delete-orphan")
+
+    # ✅ Champs dénormalisés pour la performance (Supervision/Filtres)
+    ai_level              = Column(String(20), nullable=True)
+    ai_confidence         = Column(Float, nullable=True)
+    ai_probabilities      = Column(JSON, nullable=True)
+    ai_risk_score         = Column(Integer, nullable=True)
+    ai_consistency        = Column(String(20), nullable=True)
+    ai_recommended_action = Column(String(50), nullable=True)

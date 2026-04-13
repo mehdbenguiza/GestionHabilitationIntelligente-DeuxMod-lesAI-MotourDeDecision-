@@ -25,3 +25,6 @@ class DashboardUser(Base):
     # ✅ NOUVEAU : Refresh token
     refresh_token = Column(String(500), nullable=True)
     refresh_token_created_at = Column(DateTime, nullable=True)
+    
+    # ✅ NOUVEAU : Image de profil
+    profile_image = Column(String(255), nullable=True)

@@ -8,19 +8,19 @@ from dotenv import load_dotenv
 
 # Chemin vers le .env dans app/
 env_path = Path(__file__).parent.parent / ".env"
-print(f"🔍 Chargement du .env depuis: {env_path}")
+print(f"DEBUG: Chargement du .env depuis: {env_path}")
 
 if env_path.exists():
     load_dotenv(dotenv_path=env_path)
-    print("✅ Fichier .env trouvé et chargé")
+    print("INFO: Fichier .env trouvé et chargé")
     
     # Afficher les variables chargées (sans le mot de passe)
-    print(f"📧 SMTP_USERNAME: {os.getenv('SMTP_USERNAME')}")
-    print(f"📧 EMAIL_FROM: {os.getenv('EMAIL_FROM')}")
-    print(f"🌍 ENVIRONMENT: {os.getenv('ENVIRONMENT')}")
-    print(f"🔌 ITOP_API_URL: {os.getenv('ITOP_API_URL') or 'Non configuré (mode simulation)'}")
+    print(f"INFO: SMTP_USERNAME: {os.getenv('SMTP_USERNAME')}")
+    print(f"INFO: EMAIL_FROM: {os.getenv('EMAIL_FROM')}")
+    print(f"INFO: ENVIRONMENT: {os.getenv('ENVIRONMENT')}")
+    print(f"INFO: ITOP_API_URL: {os.getenv('ITOP_API_URL') or 'Non configuré (mode simulation)'}")
 else:
-    print(f"❌ Fichier .env non trouvé à {env_path}")
+    print(f"ERROR: Fichier .env non trouvé à {env_path}")
     print("   Créez le fichier .env dans le dossier app/")
 
 class Settings(BaseSettings):
@@ -63,9 +63,9 @@ settings = Settings()
 
 # Vérification finale
 print("\n" + "="*50)
-print("🔧 CONFIGURATION FINALE:")
-print(f"📧 SMTP_USERNAME: {settings.SMTP_USERNAME or 'Non configuré'}")
-print(f"📧 EMAIL_FROM: {settings.EMAIL_FROM}")
-print(f"🌍 ENVIRONMENT: {settings.ENVIRONMENT}")
-print(f"🔌 Mode iTop: {'Réel' if settings.ITOP_API_URL else 'Simulation'}")
+print("INFO: CONFIGURATION FINALE:")
+print(f"INFO: SMTP_USERNAME: {settings.SMTP_USERNAME or 'Non configuré'}")
+print(f"INFO: EMAIL_FROM: {settings.EMAIL_FROM}")
+print(f"INFO: ENVIRONMENT: {settings.ENVIRONMENT}")
+print(f"INFO: Mode iTop: {'Réel' if settings.ITOP_API_URL else 'Simulation'}")
 print("="*50 + "\n")

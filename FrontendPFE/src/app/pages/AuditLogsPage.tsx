@@ -1,10 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   ScrollText, Download, Search, Filter, FileJson, CheckCircle, XCircle,
   Clock, User, Shield, Database, AlertTriangle, Info, ChevronLeft, ChevronRight,
   RefreshCw, Printer, Brain, X
 } from 'lucide-react';
-import { mockAuditLogs } from '../utils/mockData';
 import { Badge } from '../components/ui/badge';
 
 // Interface alignée avec le cahier des charges
@@ -29,61 +28,7 @@ interface AuditLog {
   };
 }
 
-// Enrichissement des données mock pour correspondre au cahier des charges
-const enrichedLogs: AuditLog[] = mockAuditLogs.map((log) => {
-  // Déterminer le rôle en fonction de l'acteur
-  let role: 'IA' | 'Admin' | 'Super Admin' = 'Admin';
-  if (log.acteur === 'AUTO') role = 'IA';
-  else if (log.acteur.includes('Super')) role = 'Super Admin';
-  
-  // Déterminer la catégorie
-  let categorie: 'Ticket' | 'Compte' | 'Accès' | 'Configuration' | 'Sécurité' = 'Ticket';
-  if (log.action.includes('Compte')) categorie = 'Compte';
-  else if (log.action.includes('Accès')) categorie = 'Accès';
-  else if (log.action.includes('Config')) categorie = 'Configuration';
-  else if (log.action.includes('Sécur') || log.action.includes('Auth')) categorie = 'Sécurité';
-  
-  // Déterminer le niveau d'accès
-  let niveauAcces: 'Base' | 'Sensible' | 'Critique' | undefined = undefined;
-  if (log.environnement === 'PROD' || log.environnement === 'PRD') niveauAcces = 'Critique';
-  else if (log.environnement === 'PREPROD' || log.environnement === 'CRT') niveauAcces = 'Sensible';
-  else if (log.environnement.includes('DEV') || log.environnement.includes('QL')) niveauAcces = 'Base';
-  
-  // Score de risque pour la détection d'anomalies
- // Score de risque pour la détection d'anomalies
-// Score de risque pour la détection d'anomalies - Version adaptée sans Alerte
-const risque = (() => {
-  if (log.resultat === 'Échec') {
-    return Math.floor(Math.random() * 40) + 60; // 60-100
-  } else {
-    return Math.floor(Math.random() * 30); // 0-30 pour les Succès
-  }
-})();
-  
-  return {
-    id: log.id,
-    timestamp: log.date,
-    acteur: log.acteur,
-    role,
-    action: log.action,
-    categorie,
-    ticketRef: log.ticketRef,
-    environnement: log.environnement,
-    resultat: log.resultat as 'Succès' | 'Échec' | 'Alerte',
-    niveauAcces,
-    equipe: log.acteur === 'AUTO' ? 'Système' : 
-            log.acteur.includes('Sophie') ? 'Sécurité' : 
-            log.acteur.includes('Marc') ? 'IT' : 'Support',
-    motif: log.resultat === 'Échec' ? 'Permissions insuffisantes - Nécessite validation Super Admin' : undefined,
-    risque,
-    details: {
-      ...log.details,
-      ip: `192.168.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`,
-      decision: log.resultat === 'Succès' ? 'Approuvé automatiquement par IA' : 
-                log.resultat === 'Échec' ? 'Rejeté - Demande critique sans validation' : 'En attente de décision'
-    }
-  };
-});
+// Constantes et utilitaires ont été supprimés pour charger depuis l'API
 
 export function AuditLogsPage() {
   // États pour les filtres
@@ -105,18 +50,56 @@ export function AuditLogsPage() {
   // État pour l'export
   const [showExportMessage, setShowExportMessage] = useState(false);
 
+  // État des données
+  const [logs, setLogs] = useState<AuditLog[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Charger depuis le Backend
+  const fetchLogs = async () => {
+    try {
+      setLoading(true);
+      const token = localStorage.getItem('token');
+      const response = await fetch('http://127.0.0.1:8000/audit/', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        // Convert dates
+        const mapped = data.map((item: any) => ({
+          ...item,
+          timestamp: new Date(item.timestamp),
+          // Mapping back to uppercase Frontend badges
+          niveauAcces: item.niveauAcces === 'BASE' ? 'Base' : 
+                       item.niveauAcces === 'SENSITIVE' ? 'Sensible' : 
+                       item.niveauAcces === 'CRITICAL' ? 'Critique' : item.niveauAcces
+        }));
+        setLogs(mapped);
+      }
+    } catch (error) {
+      console.error('Erreur lors du chargement des logs', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchLogs();
+  }, []);
+
   // Statistiques pour l'affichage
   const stats = {
-    total: enrichedLogs.length,
-    succes: enrichedLogs.filter(l => l.resultat === 'Succès').length,
-    echec: enrichedLogs.filter(l => l.resultat === 'Échec').length,
-    alerte: enrichedLogs.filter(l => l.resultat === 'Alerte').length,
-    ia: enrichedLogs.filter(l => l.role === 'IA').length,
-    critique: enrichedLogs.filter(l => l.niveauAcces === 'Critique').length
+    total: logs.length,
+    succes: logs.filter(l => l.resultat === 'Succès').length,
+    echec: logs.filter(l => l.resultat === 'Échec').length,
+    alerte: logs.filter(l => l.resultat === 'Alerte').length,
+    ia: logs.filter(l => l.role === 'IA').length,
+    critique: logs.filter(l => l.niveauAcces === 'Critique').length
   };
 
   // Filtrage des logs
-  const filteredLogs = enrichedLogs.filter(log => {
+  const filteredLogs = logs.filter(log => {
     // Recherche textuelle
     const matchesSearch = 
       (log.ticketRef?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
@@ -228,11 +211,12 @@ export function AuditLogsPage() {
             <Printer size={20} className="text-[#64748B]" />
           </button>
           <button
-            onClick={() => window.location.reload()}
+            onClick={fetchLogs}
             className="p-2 bg-white border border-[#E2E8F0] rounded-lg hover:bg-[#F8FAFC] transition-colors"
             title="Rafraîchir"
+            disabled={loading}
           >
-            <RefreshCw size={20} className="text-[#64748B]" />
+            <RefreshCw size={20} className={`text-[#64748B] ${loading ? 'animate-spin' : ''}`} />
           </button>
         </div>
       </div>

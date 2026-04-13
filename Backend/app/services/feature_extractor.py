@@ -25,51 +25,44 @@ class FeatureExtractor:
         print("🔧 Entraînement des encodeurs...")
         
         # 1. Encodage des variables catégorielles
-        categorical_cols = ['team', 'role', 'application', 'environment', 'access_type', 'resource']
+        categorical_cols = ['team', 'role', 'application', 'environment', 'access_type', 'resource', 'user_seniority', 'request_reason', 'manager_approval_status']
         
         for col in categorical_cols:
             le = LabelEncoder()
-            df[col + '_encoded'] = le.fit_transform(df[col])
-            self.label_encoders[col] = le
-            print(f"   → {col}: {len(le.classes_)} catégories encodées")
-        
+            # On vérifie si la colonne existe pour ne pas planter
+            if col in df.columns:
+                df[col + '_encoded'] = le.fit_transform(df[col])
+                self.label_encoders[col] = le
+            else:
+                # Fallback
+                self.label_encoders[col] = LabelEncoder()
+                df[col + '_encoded'] = 0
+            
         # 2. Features binaires
         df['is_production'] = (df['environment'] == 'PRD').astype(int)
-        df['is_critical_app'] = (df['application'] == 'T24').astype(int)
-        df['is_critical_env'] = df['environment'].isin(['INV', 'PRD']).astype(int)
-        df['is_sensitive_team'] = (df['team'] == 'SECURITE').astype(int)
-        df['is_full_access'] = df['access_type'].isin(['DELETE', 'FULL_ACCESS']).astype(int)
-        df['is_personal_data'] = (df['resource'] == 'PERSONAL_DATA').astype(int)
-        df['is_night_hour'] = ((df['hour'] < 8) | (df['hour'] > 20)).astype(int)
-        df['is_weekend'] = (df['day_of_week'] >= 5).astype(int)
-        df['is_manager'] = df['role'].isin(["CHEF_DE_PROJET", "TECH_LEAD", "PRODUCT_OWNER", "ADMINISTRATEUR", "RSSI", "TEST_LEAD"]).astype(int)
-        df['is_restricted_role'] = df['role'].isin(["STAGIAIRE", "BUSINESS_ANALYST"]).astype(int)
+        df['is_critical_app'] = df['application'].isin(['T24', 'SWIFT', 'MUREX']).astype(int)
+        df['is_critical_env'] = df['environment'].isin(['INV', 'PRD', 'CRT']).astype(int)
+        df['is_sensitive_team'] = df['team'].isin(['SECURITE', 'CONFORMITE', 'TRADING']).astype(int)
+        df['is_full_access'] = df['access_type'].isin(['DELETE', 'FULL_ACCESS', 'DBA_ACCESS']).astype(int)
+        df['is_personal_data'] = df['resource'].isin(['DONNEES_CLIENTS_SENSIBLES', 'TRANSACTIONS_FINANCIERES', 'CLEFS_CRYPTOGRAPHIQUES']).astype(int)
+        df['is_manager'] = df['role'].isin(["CHEF_DE_PROJET", "TECH_LEAD", "PRODUCT_OWNER", "ADMINISTRATEUR", "RSSI", "TEST_LEAD", "OFFICIER_CONFORMITE", "INSPECTEUR"]).astype(int)
+        df['is_restricted_role'] = df['role'].isin(["STAGIAIRE", "BUSINESS_ANALYST", "FRONT_OFFICE_TRADER"]).astype(int)
         
-        # 3. Liste des colonnes features
+        # Nouvelles briques métier
+        df['is_approved'] = (df.get('manager_approval_status', '') == 'approved').astype(int)
+        df['is_urgent'] = df.get('request_reason', '').isin(['incident_production_bloquant', 'demande_metier_urgente']).astype(int)
+        df['is_junior'] = (df.get('user_seniority', '') == 'junior').astype(int)
+        # 3. Liste exhaustive des colonnes features
         self.feature_columns = [
-            'team_encoded',
-            'role_encoded',
-            'application_encoded', 
-            'environment_encoded',
-            'access_type_encoded',
-            'resource_encoded',
-            'hour',
-            'day_of_week',
-            'is_production',
-            'is_critical_app',
-            'is_critical_env',
-            'is_sensitive_team',
-            'is_full_access',
-            'is_personal_data',
-            'is_night_hour',
-            'is_weekend',
-            'is_manager',
-            'is_restricted_role'
+            'team_encoded', 'role_encoded', 'application_encoded', 
+            'environment_encoded', 'access_type_encoded', 'resource_encoded',
+            'user_seniority_encoded', 'request_reason_encoded', 'manager_approval_status_encoded',
+            'is_production', 'is_critical_app', 'is_critical_env', 'is_sensitive_team',
+            'is_full_access', 'is_personal_data', 'is_manager', 'is_restricted_role',
+            'is_approved', 'is_urgent', 'is_junior'
         ]
         
         self.is_fitted = True
-        print(f"✅ {len(self.feature_columns)} features préparées")
-        
         return self
     
     def transform(self, df):
@@ -81,21 +74,40 @@ class FeatureExtractor:
         
         df_features = df.copy()
         
+        # Assurer les colonnes manquantes
+        for col in ['user_seniority', 'request_reason', 'manager_approval_status']:
+            if col not in df_features.columns:
+                if col == 'user_seniority': df_features[col] = 'senior'
+                elif col == 'request_reason': df_features[col] = 'normal'
+                else: df_features[col] = 'none'
+
         # Appliquer les encodeurs
+        def safe_transform(le, value):
+            if value in le.classes_:
+                return le.transform([value])[0]
+            else:
+                return -1
+
         for col, le in self.label_encoders.items():
-            df_features[col + '_encoded'] = le.transform(df_features[col])
+            try:
+                df_features[col + '_encoded'] = df_features[col].map(lambda s: safe_transform(le, s))
+            except Exception:
+                df_features[col + '_encoded'] = -1
         
         # Features binaires
         df_features['is_production'] = (df_features['environment'] == 'PRD').astype(int)
-        df_features['is_critical_app'] = (df_features['application'] == 'T24').astype(int)
-        df_features['is_critical_env'] = df_features['environment'].isin(['INV', 'PRD']).astype(int)
-        df_features['is_sensitive_team'] = (df_features['team'] == 'SECURITE').astype(int)
-        df_features['is_full_access'] = df_features['access_type'].isin(['DELETE', 'FULL_ACCESS']).astype(int)
-        df_features['is_personal_data'] = (df_features['resource'] == 'PERSONAL_DATA').astype(int)
-        df_features['is_night_hour'] = ((df_features['hour'] < 8) | (df_features['hour'] > 20)).astype(int)
-        df_features['is_weekend'] = (df_features['day_of_week'] >= 5).astype(int)
-        df_features['is_manager'] = df_features['role'].isin(["CHEF_DE_PROJET", "TECH_LEAD", "PRODUCT_OWNER", "ADMINISTRATEUR", "RSSI", "TEST_LEAD"]).astype(int)
-        df_features['is_restricted_role'] = df_features['role'].isin(["STAGIAIRE", "BUSINESS_ANALYST"]).astype(int)
+        df_features['is_critical_app'] = df_features['application'].isin(['T24', 'SWIFT', 'MUREX']).astype(int)
+        df_features['is_critical_env'] = df_features['environment'].isin(['INV', 'PRD', 'CRT']).astype(int)
+        df_features['is_sensitive_team'] = df_features['team'].isin(['SECURITE', 'CONFORMITE', 'TRADING']).astype(int)
+        df_features['is_full_access'] = df_features['access_type'].isin(['DELETE', 'FULL_ACCESS', 'DBA_ACCESS']).astype(int)
+        df_features['is_personal_data'] = df_features['resource'].isin(['DONNEES_CLIENTS_SENSIBLES', 'TRANSACTIONS_FINANCIERES', 'CLEFS_CRYPTOGRAPHIQUES']).astype(int)
+        df_features['is_manager'] = df_features['role'].isin(["CHEF_DE_PROJET", "TECH_LEAD", "PRODUCT_OWNER", "ADMINISTRATEUR", "RSSI", "TEST_LEAD", "OFFICIER_CONFORMITE", "INSPECTEUR"]).astype(int)
+        df_features['is_restricted_role'] = df_features['role'].isin(["STAGIAIRE", "BUSINESS_ANALYST", "FRONT_OFFICE_TRADER"]).astype(int)
+        
+        # Nouvelles briques métier
+        df_features['is_approved'] = (df_features['manager_approval_status'] == 'approved').astype(int)
+        df_features['is_urgent'] = df_features['request_reason'].isin(['incident_production_bloquant', 'demande_metier_urgente']).astype(int)
+        df_features['is_junior'] = (df_features['user_seniority'] == 'junior').astype(int)
         
         return df_features[self.feature_columns]
     

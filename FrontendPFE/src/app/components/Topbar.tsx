@@ -27,6 +27,7 @@ export function Topbar() {
   // ==================== DONNÉES RÉELLES DE L'UTILISATEUR ====================
   const [userName, setUserName] = useState('Chargement...');
   const [userRole, setUserRole] = useState('');
+  const [profileImage, setProfileImage] = useState<string | null>(null);
   const [loadingUser, setLoadingUser] = useState(true);
 
   // États existants
@@ -63,6 +64,7 @@ export function Topbar() {
       .then(data => {
         setUserName(data.fullName);
         setUserRole(data.role === 'SUPER_ADMIN' ? 'Super Admin' : 'Admin');
+        setProfileImage(data.profile_image || null);
         setLoadingUser(false);
       })
       .catch(() => {
@@ -235,9 +237,17 @@ export function Topbar() {
                 </div>
                 <div className="text-xs text-[#64748B]">{userRole}</div>
               </div>
-              <div className="w-10 h-10 bg-[#003087] rounded-full flex items-center justify-center">
-                <User size={20} className="text-white" />
-              </div>
+              {profileImage ? (
+                <img 
+                  src={`http://127.0.0.1:8000${profileImage}`} 
+                  alt="Profile" 
+                  className="w-10 h-10 rounded-full object-cover border border-gray-200"
+                />
+              ) : (
+                <div className="w-10 h-10 bg-[#003087] rounded-full flex items-center justify-center">
+                  <User size={20} className="text-white" />
+                </div>
+              )}
               <ChevronDown size={16} className="text-[#64748B]" />
             </button>
 

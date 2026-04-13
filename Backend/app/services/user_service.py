@@ -59,7 +59,8 @@ class UserService:
             "createdAt": user.createdAt,
             "lastLogin": user.lastLogin,
             "lastLoginIP": user.lastLoginIP,
-            "lastSessionDuration": user.lastSessionDuration
+            "lastSessionDuration": user.lastSessionDuration,
+            "profile_image": user.profile_image
         }
 
     def update_profile(self, user_id: int, first_name: str = None, last_name: str = None, email: str = None) -> DashboardUser:

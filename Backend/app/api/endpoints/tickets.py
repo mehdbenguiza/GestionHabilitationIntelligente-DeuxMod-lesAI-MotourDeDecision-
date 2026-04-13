@@ -19,9 +19,6 @@ def get_ticket_service(db: Session = Depends(get_db)) -> TicketService:
 def serialize_ticket(ticket: Ticket) -> dict:
     """
     ✅ Sérialise un ticket en dict incluant les champs IA plats.
-    Pydantic `from_orm` ne gère pas les attributs dynamiques ajoutés après construction,
-    donc on sérialise manuellement pour garantir que ai_level, ai_confidence, ai_probabilities
-    soient toujours présents.
     """
     classification = getattr(ticket, 'classification', None)
 
@@ -45,21 +42,42 @@ def serialize_ticket(ticket: Ticket) -> dict:
         "rejected_by": ticket.rejected_by,
         "rejected_at": ticket.rejected_at.isoformat() if ticket.rejected_at else None,
 
-        # ✅ Champs IA plats (toujours présents, même si None)
-        "ai_level": getattr(ticket, 'ai_level', None),
-        "ai_confidence": getattr(ticket, 'ai_confidence', None),
+        # ✅ Champs IA plats
+        "ai_level":        getattr(ticket, 'ai_level', None),
+        "ai_confidence":   getattr(ticket, 'ai_confidence', None),
         "ai_probabilities": getattr(ticket, 'ai_probabilities', None),
+        "ai_risk_score":   getattr(ticket, 'ai_risk_score', None),
+        "ai_consistency":  getattr(ticket, 'ai_consistency', None),
+        "ai_recommended_action": getattr(ticket, 'ai_recommended_action', None),
+
+        # ✅ Nouveaux champs explainability
+        "ai_explanation":  classification.explanation  if classification else None,
+        "ai_risk_factors": classification.risk_factors if classification else None,
+        "ai_source":       classification.source       if classification else None,
 
         # Objet classification complet imbriqué
         "classification": {
             "predicted_level": classification.predicted_level,
-            "confidence": round(classification.confidence, 2),
-            "probabilities": classification.probabilities,
-            "model_version": classification.model_version,
-            "processed_at": classification.processed_at.isoformat() if classification.processed_at else None,
+            "confidence":      round(classification.confidence, 2) if classification.confidence else 0,
+            "probabilities":   classification.probabilities,
+            "explanation":     classification.explanation,
+            "risk_factors":    classification.risk_factors,
+            "source":          classification.source,
+            "model_version":   classification.model_version,
+            "processed_at":    classification.processed_at.isoformat() if classification.processed_at else None,
+            
+            # Nouveaux champs d'audit
+            "risk_score_rules":       classification.risk_score_rules,
+            "decision_source":        classification.decision_source,
+            "consistency_status":     classification.consistency_status,
+            "consistency_message":    classification.consistency_message,
+            "triggered_rules":        classification.triggered_rules,
+            "recommended_action":     classification.recommended_action,
+            "confidence_level_label": classification.confidence_level_label,
         } if classification else None,
     }
     return result
+
 
 
 @router.get("/sync")
@@ -71,12 +89,12 @@ async def sync_tickets(
     return ticket_service.sync_from_itop()
 
 
-@router.get("/", response_model=None)
+@router.get("", response_model=None)
 async def get_tickets(
     status: Optional[TicketStatus] = None,
     team: Optional[str] = None,
     skip: int = Query(0, ge=0),
-    limit: int = Query(50, ge=1, le=100),
+    limit: int = Query(1000, ge=1, le=5000),
     ticket_service: TicketService = Depends(get_ticket_service),
     current_user: DashboardUser = Depends(get_current_user)
 ):

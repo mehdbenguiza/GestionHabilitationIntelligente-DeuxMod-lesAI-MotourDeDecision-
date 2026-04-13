@@ -10,6 +10,7 @@ interface UserData {
   lastLogin: string | null;
   lastLoginIP: string | null;
   lastSessionDuration: string | null;
+  profile_image?: string;
 }
 
 interface EditFormData {
@@ -136,7 +137,8 @@ export function ProfilePage() {
           createdAt: profileData.createdAt || new Date().toISOString(),
           lastLogin: profileData.lastLogin || null,
           lastLoginIP: profileData.lastLoginIP || null,
-          lastSessionDuration: profileData.lastSessionDuration || null
+          lastSessionDuration: profileData.lastSessionDuration || null,
+          profile_image: profileData.profile_image || undefined
         });
 
         setEditForm({
@@ -302,6 +304,40 @@ export function ProfilePage() {
     );
   }
 
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const token = localStorage.getItem('token');
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      setLoading(true);
+      const res = await fetch('http://127.0.0.1:8000/users/upload-profile-image', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      });
+
+      if (!res.ok) throw new Error("Erreur lors de l'upload de l'image");
+      
+      const data = await res.json();
+      setUserData(prev => prev ? { ...prev, profile_image: data.profile_image } : null);
+      setSuccessMessage('Image de profil mise à jour');
+      setTimeout(() => setSuccessMessage(''), 3000);
+      
+      // Force reload to update Topbar
+      window.location.reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Une erreur est survenue");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   if (error && !userData) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -348,8 +384,29 @@ export function ProfilePage() {
           {/* Informations personnelles */}
           <div className="bg-white rounded-xl p-6 border border-gray-200 shadow-sm">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                <User className="text-[#003087]" size={24} />
+              <h2 className="text-xl font-bold text-gray-900 flex items-center gap-4">
+                <div className="relative group cursor-pointer inline-block">
+                  {userData.profile_image ? (
+                    <img 
+                      src={`http://127.0.0.1:8000${userData.profile_image}`} 
+                      alt="Profile" 
+                      className="w-16 h-16 rounded-full object-cover border-2 border-gray-200"
+                    />
+                  ) : (
+                    <div className="w-16 h-16 bg-[#003087] rounded-full flex items-center justify-center">
+                      <User className="text-white" size={32} />
+                    </div>
+                  )}
+                  <label className="absolute inset-0 bg-black bg-opacity-50 text-white flex items-center justify-center rounded-full opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity text-xs font-semibold text-center">
+                    Changer<br/>Photo
+                    <input 
+                      type="file" 
+                      accept="image/png, image/jpeg, image/jpg" 
+                      className="hidden" 
+                      onChange={handleImageUpload} 
+                    />
+                  </label>
+                </div>
                 Informations Personnelles
               </h2>
               <button

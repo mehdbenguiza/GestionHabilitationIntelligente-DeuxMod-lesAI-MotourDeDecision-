@@ -36,11 +36,19 @@ class TicketUpdate(BaseModel):
     assigned_to: Optional[str] = None
 
 
-class ClassificationInfo(BaseModel):
-    predicted_level: str
-    confidence: float
-    probabilities: Optional[Dict[str, float]] = None
-    model_version: Optional[str] = None
+    explanation: Optional[str] = None
+    risk_factors: Optional[Dict[str, Any]] = None
+    source: Optional[str] = None
+    
+    # Audit Gold
+    risk_score_rules: Optional[int] = None
+    decision_source: Optional[str] = None
+    consistency_status: Optional[str] = None
+    consistency_message: Optional[str] = None
+    triggered_rules: Optional[List[str]] = None
+    recommended_action: Optional[str] = None
+    confidence_level_label: Optional[str] = None
+    
     processed_at: Optional[datetime] = None
 
     class Config:
@@ -67,6 +75,11 @@ class TicketResponse(TicketBase):
     ai_level: Optional[str] = None
     ai_confidence: Optional[float] = None
     ai_probabilities: Optional[Dict[str, float]] = None
+    
+    # Raccourcis Audit
+    ai_risk_score: Optional[int] = None
+    ai_consistency: Optional[str] = None
+    ai_recommended_action: Optional[str] = None
 
     class Config:
         from_attributes = True

@@ -1,6 +1,6 @@
 // src/app/components/Sidebar.tsx
 import { NavLink } from 'react-router-dom';
-import { Home, FileText, Shield, ScrollText, Users, User, Menu } from 'lucide-react';
+import { Home, FileText, Shield, ScrollText, Users, User, Menu, FlaskConical } from 'lucide-react';
 import { BiatLogo } from './BiatLogo';
 import { useSidebar } from '../contexts/SidebarContext';
 
@@ -8,6 +8,7 @@ const navItems = [
   { path: '/dashboard', label: 'Accueil', icon: Home },
   { path: '/tickets', label: 'Tickets', icon: FileText },
   { path: '/supervision', label: 'Supervision IA', icon: Shield },
+  { path: '/ai-lab', label: 'Lab IA', icon: FlaskConical },
   { path: '/audit-logs', label: 'Audit Logs', icon: ScrollText },
   { path: '/admins', label: 'Gestion Admins', icon: Users },
   { path: '/profile', label: 'Mon Profil', icon: User },

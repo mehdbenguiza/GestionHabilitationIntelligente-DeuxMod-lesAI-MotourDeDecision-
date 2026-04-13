@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Download, Eye, RefreshCw, XCircle, Brain } from 'lucide-react';
+import { Search, Download, Eye, RefreshCw, XCircle, Brain, ThumbsUp, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Badge } from '../components/ui/badge';
 
 interface Ticket {
@@ -38,6 +38,9 @@ export function TicketsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatut, setFilterStatut] = useState('all');
   const [filterNiveau, setFilterNiveau] = useState('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [likedTickets, setLikedTickets] = useState<number[]>([]);
+  const itemsPerPage = 50;
 
   const token = localStorage.getItem('token');
 
@@ -64,7 +67,7 @@ export function TicketsPage() {
     }
 
     try {
-      const response = await fetch('http://127.0.0.1:8000/tickets/', {
+      const response = await fetch('http://127.0.0.1:8000/tickets?v=2', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -132,6 +135,31 @@ export function TicketsPage() {
     return matchesSearch && matchesStatut && matchesNiveau;
   });
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filterStatut, filterNiveau]);
+
+  const totalPages = Math.ceil(filteredTickets.length / itemsPerPage) || 1;
+  const currentTickets = filteredTickets.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+  const handleLike = async (ticketId: number) => {
+    if (likedTickets.includes(ticketId)) return; // Already liked
+    try {
+      const response = await fetch(`http://127.0.0.1:8000/feedback/${ticketId}`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          classification_vote: 'like',
+          reason_vote: 'like'
+        })
+      });
+      if (!response.ok) throw new Error('Erreur lors du vote');
+      setLikedTickets([...likedTickets, ticketId]);
+    } catch (err) {
+      console.error('Erreur lors du vote', err);
+    }
+  };
+
   const getNiveauBadgeColor = (niveau: string) => {
     switch (niveau) {
       case 'Base': return 'bg-green-100 text-green-800 border-green-300';
@@ -176,7 +204,7 @@ export function TicketsPage() {
   const syncTickets = async () => {
     setLoading(true);
     try {
-      const response = await fetch('http://127.0.0.1:8000/tickets/sync', {
+      const response = await fetch('http://127.0.0.1:8000/tickets/sync?v=2', {
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
       });
       if (!response.ok) throw new Error('Erreur lors de la synchronisation');
@@ -190,7 +218,7 @@ export function TicketsPage() {
 
   const createTestTicket = async () => {
     try {
-      const response = await fetch('http://127.0.0.1:8000/tickets/simulate/create', {
+      const response = await fetch('http://127.0.0.1:8000/tickets/simulate/create?v=2', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
       });
@@ -199,6 +227,38 @@ export function TicketsPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur de création');
     }
+  };
+
+  const exportToCSV = () => {
+    if (filteredTickets.length === 0) return;
+
+    const headers = ["ID", "Référence", "Demandeur", "Équipe", "Niveau IA", "Confiance", "Statut", "Date"];
+    
+    const rows = filteredTickets.map(ticket => [
+      ticket.id,
+      ticket.ref,
+      ticket.employee_name,
+      ticket.team_name,
+      getAIFr(ticket.ai_level),
+      ticket.ai_confidence ? `${ticket.ai_confidence}%` : '-',
+      getStatutFrancais(ticket.status),
+      new Date(ticket.created_at).toLocaleDateString('fr-FR')
+    ]);
+
+    const csvContent = [
+      headers.join(';'),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(';'))
+    ].join('\n');
+
+    // Pour l'encodage correct (Excel UTF-8)
+    const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Export_Tickets_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   if (loading && tickets.length === 0) {
@@ -284,7 +344,11 @@ export function TicketsPage() {
               <Brain size={18} /> + Ticket Test
             </button>
           </div>
-          <button className="flex items-center gap-2 px-4 py-2 bg-[#003087] text-white rounded-lg hover:bg-[#002066] transition-colors">
+          <button 
+            onClick={exportToCSV}
+            disabled={filteredTickets.length === 0}
+            className="flex items-center gap-2 px-4 py-2 bg-[#003087] text-white rounded-lg hover:bg-[#002066] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
             <Download size={18} /> Exporter CSV
           </button>
         </div>
@@ -306,7 +370,7 @@ export function TicketsPage() {
               </tr>
             </thead>
             <tbody>
-              {filteredTickets.map((ticket) => (
+              {currentTickets.map((ticket) => (
                 <tr key={ticket.id} className="border-b border-[#E2E8F0] hover:bg-[#F8FAFC] transition-colors">
                   <td className="py-4 px-6 font-semibold text-[#003087]">{ticket.ref}</td>
                   <td className="py-4 px-6 text-[#1E2937]">{ticket.employee_name}</td>
@@ -326,7 +390,7 @@ export function TicketsPage() {
                   <td className="py-4 px-6 text-[#64748B] text-sm">
                     {new Date(ticket.created_at).toLocaleDateString('fr-FR')}
                   </td>
-                  <td className="py-4 px-6">
+                  <td className="py-4 px-6 flex gap-2">
                     <button
                       onClick={() => navigate(`/ticket/${ticket.id}`)}
                       className="p-2 hover:bg-[#003087] hover:text-white rounded-lg transition-colors text-[#64748B]"
@@ -334,6 +398,19 @@ export function TicketsPage() {
                     >
                       <Eye size={18} />
                     </button>
+                    {ticket.ai_level && (
+                      <button
+                        onClick={() => handleLike(ticket.id)}
+                        className={`p-2 rounded-lg transition-all duration-300 ${
+                          likedTickets.includes(ticket.id)
+                            ? 'bg-green-100 text-green-700 pointer-events-none shadow-[0_0_10px_rgba(34,197,94,0.4)] border border-green-200'
+                            : 'hover:bg-green-50 hover:text-green-600 text-[#64748B] hover:shadow-sm'
+                        }`}
+                        title="La classification est parfaite (Like)"
+                      >
+                        <ThumbsUp size={18} className={likedTickets.includes(ticket.id) ? 'fill-current' : ''} />
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -347,8 +424,56 @@ export function TicketsPage() {
 
         <div className="p-4 bg-[#F8FAFC] border-t border-[#E2E8F0] flex items-center justify-between">
           <div className="text-sm text-[#64748B]">
-            Affichage de <span className="font-semibold text-[#1E2937]">{filteredTickets.length}</span> tickets
+            Affichage de <span className="font-semibold text-[#1E2937]">{currentTickets.length}</span> sur <span className="font-semibold text-[#1E2937]">{filteredTickets.length}</span> tickets
           </div>
+          
+          {totalPages > 1 && (
+            <div className="flex gap-2 items-center">
+              <button 
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="p-2 rounded hover:bg-[#E2E8F0] disabled:opacity-50 transition"
+              >
+                <ChevronLeft size={18} />
+              </button>
+              
+              <div className="flex gap-1">
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  let pageNum = currentPage;
+                  if (currentPage <= 3) pageNum = i + 1;
+                  else if (currentPage >= totalPages - 2) pageNum = totalPages - 4 + i;
+                  else pageNum = currentPage - 2 + i;
+                  
+                  if (pageNum < 1 || pageNum > totalPages) return null;
+                  
+                  return (
+                    <button
+                      key={pageNum}
+                      onClick={() => setCurrentPage(pageNum)}
+                      className={`px-3 py-1 rounded transition-colors ${
+                        currentPage === pageNum
+                          ? 'bg-[#003087] text-white font-semibold shadow'
+                          : 'bg-white hover:bg-[#E2E8F0] text-[#64748B] border border-[#E2E8F0]'
+                      }`}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                })}
+                {totalPages > 5 && currentPage < totalPages - 2 && (
+                  <span className="px-2 py-1 text-[#64748B]">...</span>
+                )}
+              </div>
+
+              <button 
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="p-2 rounded hover:bg-[#E2E8F0] disabled:opacity-50 transition"
+              >
+                <ChevronRight size={18} />
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

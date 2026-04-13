@@ -191,7 +191,7 @@ export function DashboardPage() {
   const fetchStats = async () => {
     if (!token) return;
     try {
-      const response = await fetch('http://127.0.0.1:8000/tickets/', {
+      const response = await fetch('http://127.0.0.1:8000/tickets?v=2', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (response.ok) {
@@ -253,7 +253,7 @@ export function DashboardPage() {
   const generateTestTicket = async () => {
     setGenerating(true);
     try {
-      const response = await fetch('http://127.0.0.1:8000/tickets/simulate/create', {
+      const response = await fetch('http://127.0.0.1:8000/tickets/simulate/create?v=2', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
       });

@@ -1,6 +1,8 @@
 # app/api/endpoints/users.py
 
-from fastapi import APIRouter, Depends, HTTPException
+import os
+import shutil
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.user import DashboardUser
@@ -155,3 +157,30 @@ def change_password(
     db.commit()
 
     return {"msg": "Mot de passe changé avec succès"}
+
+@router.post("/upload-profile-image")
+def upload_profile_image(
+    file: UploadFile = File(...),
+    current_user: DashboardUser = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Télécharger une image de profil"""
+    upload_dir = "uploads/profiles"
+    os.makedirs(upload_dir, exist_ok=True)
+    
+    file_extension = file.filename.split(".")[-1]
+    filename = f"user_{current_user.id}.{file_extension}"
+    file_path = os.path.join(upload_dir, filename)
+    
+    # Save the file
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+        
+    # L'URL d'accès public
+    image_url = f"/api/uploads/profiles/{filename}"
+    
+    # Mettre à jour l'utilisateur dans la DB
+    current_user.profile_image = image_url
+    db.commit()
+    
+    return {"msg": "Image de profil mise à jour", "profile_image": image_url}

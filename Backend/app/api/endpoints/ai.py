@@ -151,3 +151,69 @@ async def ai_decisions(db: Session = Depends(get_db)):
         })
         
     return result
+
+
+# ==================== RÉTRO-ENTRAÎNEMENT (Feedback Loop) ====================
+
+@router.post("/retrain")
+async def retrain_model(
+    db: Session = Depends(get_db),
+    current_user: DashboardUser = Depends(get_current_user),
+):
+    """
+    Déclenche le rétro-entraînement du modèle IA à partir des tickets
+    traités manuellement (feedback humain).  Réservé aux SUPER_ADMIN.
+    """
+    if current_user.role.value not in ("SUPER_ADMIN",):
+        raise HTTPException(status_code=403, detail="Réservé aux Super Admins")
+
+    import subprocess
+    import sys
+    import os
+
+    script = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))),
+        "scripts", "retrain_classifier.py"
+    )
+
+    if not os.path.exists(script):
+        raise HTTPException(status_code=404, detail="Script de rétro-entraînement introuvable")
+
+    try:
+        result = subprocess.run(
+            [sys.executable, script],
+            capture_output=True, text=True, timeout=300,
+            cwd=os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+        )
+        if result.returncode != 0:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Erreur lors du rétro-entraînement :\n{result.stderr[-2000:]}"
+            )
+
+        # Recharger le modèle en mémoire
+        ai_service.load_models()
+
+        return {
+            "status": "success",
+            "message": "Modèle ré-entraîné et rechargé avec succès",
+            "output": result.stdout[-3000:],
+        }
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=504, detail="Timeout — le rétro-entraînement a pris trop de temps")
+
+
+@router.get("/retrain/history")
+async def retrain_history(
+    current_user: DashboardUser = Depends(get_current_user),
+):
+    """Retourne l'historique des cycles de rétro-entraînement (accuracy, CV, etc.)"""
+    import os, json
+    hist_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))),
+        "models", "metrics_history.json"
+    )
+    if not os.path.exists(hist_path):
+        return []
+    with open(hist_path, "r", encoding="utf-8") as f:
+        return json.load(f)

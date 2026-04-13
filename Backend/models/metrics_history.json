@@ -1,0 +1,54 @@
+[
+  {
+    "date": "2026-04-09T00:23:15.057585",
+    "total_tickets": 5000,
+    "human_tickets": 0,
+    "accuracy": 0.846,
+    "cv_mean": 0.8466,
+    "cv_std": 0.0083,
+    "label_distribution": {
+      "CRITICAL": 2887,
+      "BASE": 1109,
+      "SENSITIVE": 1004
+    }
+  },
+  {
+    "date": "2026-04-09T00:53:44.045041",
+    "total_tickets": 5001,
+    "human_tickets": 1,
+    "accuracy": 0.8362,
+    "cv_mean": 0.8152,
+    "cv_std": 0.012,
+    "label_distribution": {
+      "CRITICAL": 2644,
+      "BASE": 1190,
+      "SENSITIVE": 1167
+    }
+  },
+  {
+    "date": "2026-04-09T11:28:46.824288",
+    "total_tickets": 5254,
+    "human_tickets": 9,
+    "accuracy": 0.8449,
+    "cv_mean": 0.8396,
+    "cv_std": 0.0106,
+    "label_distribution": {
+      "BASE": 2637,
+      "SENSITIVE": 1428,
+      "CRITICAL": 1189
+    }
+  },
+  {
+    "date": "2026-04-09T11:29:36.753211",
+    "total_tickets": 5254,
+    "human_tickets": 9,
+    "accuracy": 0.8449,
+    "cv_mean": 0.8396,
+    "cv_std": 0.0106,
+    "label_distribution": {
+      "BASE": 2637,
+      "SENSITIVE": 1428,
+      "CRITICAL": 1189
+    }
+  }
+]
