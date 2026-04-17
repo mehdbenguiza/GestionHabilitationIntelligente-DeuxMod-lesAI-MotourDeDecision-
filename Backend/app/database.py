@@ -14,12 +14,20 @@ if DATABASE_URL.startswith("sqlite"):
         echo=False  # Mettre True pour debug SQL
     )
 else:
-    # MySQL / PostgreSQL
+    # MySQL / PostgreSQL — config robuste pour XAMPP et production
     engine = create_engine(
         DATABASE_URL,
-        pool_pre_ping=True,   # Vérifie que la connexion est toujours active
-        pool_recycle=3600,    # Recycle les connexions chaque heure
-        echo=False            # Mettre True pour debug SQL
+        pool_pre_ping=True,       # Vérifie la connexion avant chaque requête (évite WinError 10054)
+        pool_recycle=1800,        # Recycle les connexions toutes les 30 min (au lieu de 1h)
+        pool_size=5,              # Nombre de connexions persistantes dans le pool
+        max_overflow=10,          # Connexions supplémentaires autorisées en pic
+        pool_timeout=30,          # Attendre max 30s pour une connexion disponible
+        connect_args={
+            "connect_timeout": 60,        # Timeout de connexion initiale
+            "read_timeout":    60,        # Timeout de lecture MySQL
+            "write_timeout":   60,        # Timeout d'écriture MySQL
+        },
+        echo=False
     )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

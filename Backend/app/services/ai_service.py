@@ -8,6 +8,7 @@ from app.services.feature_extractor import FeatureExtractor
 from app.models.classification_result import ClassificationResult
 from app.models.decision_engine import DecisionEngine
 from app.models.ticket import Ticket, TicketStatus
+from app.services.audit_service import audit_service
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Constantes partagées (Alignées sur le nouveau generator)
@@ -364,6 +365,19 @@ class AIService:
     def classify_ticket_model(self, ticket: Ticket, db: Session | None = None) -> dict:
         """Point d'entrée principal via objet SQLAlchemy"""
         details  = self._get_details(ticket)
+
+        # ✅ Lire la séniorité RÉELLE depuis la table employees
+        # Le JSON du ticket peut être absent ou erroné — la DB est la source de vérité
+        employee_seniority = details.get("user_seniority", "junior")
+        if db is not None and ticket.employee_id:
+            try:
+                from app.models.employee import Employee
+                emp = db.query(Employee).filter(Employee.id == ticket.employee_id).first()
+                if emp and emp.seniority:
+                    employee_seniority = emp.seniority
+            except Exception as e:
+                print(f"WARNING: Impossible de lire la seniorite employee {ticket.employee_id}: {e}")
+
         ticket_data = {
             "team":                    ticket.team_name or "MOE",
             "role":                    self._extract_role(ticket),
@@ -371,11 +385,11 @@ class AIService:
             "environment":             self._extract_environment(ticket),
             "access_type":             self._extract_access_type(ticket),
             "resource":                self._extract_resource(ticket),
-            "user_seniority":          details.get("user_seniority", "junior"),
+            "user_seniority":          employee_seniority,   
             "request_reason":          details.get("request_reason", "maintenance_preventive"),
             "manager_approval_status": details.get("manager_approval_status", "none"),
         }
-        
+
         if db is not None:
             correction = self.check_corrections(db, ticket_data)
             if correction: return correction
@@ -392,7 +406,7 @@ class AIService:
             ticket_id               = ticket.id,
             predicted_level         = result["level"],
             confidence              = result["confidence"],
-            probabilities           = result["probabilities"],
+            probabilities           = result.get("probabilities", {}),
             explanation             = result.get("explanation", ""),
             risk_factors            = result.get("details", {}),
             model_version           = self.model_version,
@@ -410,13 +424,40 @@ class AIService:
             processed_at            = datetime.utcnow(),
         )
         db.add(classification)
+        
+        # 🔔 ALERTE : Création d'une notification via AuditService
+        predicted = classification.predicted_level
+        if predicted == "CRITICAL":
+            audit_service.notify(
+                db=db,
+                title=f"ALERTE: Ticket Critique {ticket.ref}",
+                message=f"Risque élevé détecté sur {ticket.ref} ({ticket.employee_name}). Validation immédiate requise.",
+                type="danger"
+            )
+        elif predicted == "SENSITIVE":
+            audit_service.notify(
+                db=db,
+                title=f"Alerte: Ticket Sensible {ticket.ref}",
+                message=f"Le ticket {ticket.ref} demande une revue d'accès.",
+                type="warning"
+            )
+        else:
+            audit_service.notify(
+                db=db,
+                title=f"Info: Nouveau Ticket {ticket.ref}",
+                message=f"Ticket de niveau BASE auto-analysé.",
+                type="info"
+            )
+        print(f"[NOTIF] Notification créée pour le ticket {ticket.ref} ({predicted})")
+
         db.flush()
 
-        # Enregistrer un Log d'Audit spécifique à l'IA (v2.0)
+        # Enregistrer un Log d'Audit spécifique à l'IA via AuditService
         envs = getattr(ticket, 'requested_environments', ["Inconnu"])
         env_name = envs[0] if envs else "Inconnu"
         
-        audit_ia = AuditLog(
+        audit_service.log_action(
+            db=db,
             ticket_id=ticket.id,
             ticket_ref=ticket.ref,
             acteur_name="Moteur IA Hybride",
@@ -433,7 +474,6 @@ class AIService:
                 "consistency_msg": classification.consistency_message
             }
         )
-        db.add(audit_ia)
 
         decision = self._apply_decision_rules(result)
 
@@ -456,6 +496,30 @@ class AIService:
         
         if decision["action"] == "AUTO_APPROVE":
             ticket.status = TicketStatus.APPROVED
+            
+            # --- Automatisation de la création du profil (Auto-Approbation) ---
+            try:
+                from app.services.profile_service import profile_service
+                from app.services.itop_service import ITopService
+                
+                access_profile = profile_service.create_profile_from_ticket(
+                    db          = db,
+                    ticket      = ticket,
+                    approved_by = "Moteur IA Automatique",
+                )
+                
+                itop_srv = ITopService()
+                system_name = access_profile.systeme.nom if access_profile.systeme else "Système cible"
+                itop_srv.notify_ticket_approved(
+                    ticket      = ticket,
+                    profile     = access_profile,
+                    system_name = system_name,
+                    approved_by = "Moteur IA Automatique",
+                )
+                itop_srv.update_ticket_status(ticket.ref, "approved", "Auto-approbation de niveau BASE par l'IA.")
+            except Exception as e:
+                print(f"⚠️ [AUTO-APPROVE] Erreur lors de la création du profil automatisée pour {ticket.ref}: {e}")
+            # ------------------------------------------------------------------
         elif decision["action"] == "ESCALATE_ADMIN":
             ticket.status = TicketStatus.ASSIGNED
             ticket.assigned_to = "ADMIN"

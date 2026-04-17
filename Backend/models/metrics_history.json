@@ -50,5 +50,18 @@
       "SENSITIVE": 1428,
       "CRITICAL": 1189
     }
+  },
+  {
+    "date": "2026-04-17T21:34:13.600061",
+    "total_tickets": 5271,
+    "human_tickets": 24,
+    "accuracy": 0.8427,
+    "cv_mean": 0.8403,
+    "cv_std": 0.0112,
+    "label_distribution": {
+      "BASE": 2651,
+      "SENSITIVE": 1428,
+      "CRITICAL": 1192
+    }
   }
 ]

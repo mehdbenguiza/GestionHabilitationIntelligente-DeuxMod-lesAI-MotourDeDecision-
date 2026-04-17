@@ -41,6 +41,22 @@ interface Ticket {
   ai_explanation?: string;
   ai_risk_factors?: Record<string, [number, string]>;
   ai_source?: string;
+  ai_consistency?: string;
+  ai_recommended_action?: string;
+  classification?: {
+    predicted_level: string;
+    confidence: number;
+    probabilities: Record<string, number>;
+    explanation: string;
+    risk_factors: Record<string, [number, string]>;
+    source: string;
+    consistency_status: string;
+    consistency_message: string;
+    triggered_rules: string[];
+    risk_score_rules: number;
+    recommended_action: string;
+    confidence_level_label: string;
+  };
 }
 
 interface UserInfo {
@@ -54,6 +70,7 @@ export function TicketDetailPage() {
   const [ticket, setTicket] = useState<Ticket | null>(null);
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
   const [historique, setHistorique] = useState<any[]>([]);
+  const [generatedProfile, setGeneratedProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showRejectModal, setShowRejectModal] = useState(false);
@@ -109,6 +126,20 @@ export function TicketDetailPage() {
 
       const data = await response.json();
       setTicket(data);
+
+      // Si le ticket est approuvé, on va chercher l'habilitation correspondante
+      if (data.status === 'APPROVED') {
+        try {
+          const pRes = await fetch(`http://127.0.0.1:8000/profiles?limit=500`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (pRes.ok) {
+            const pData = await pRes.json();
+            const prof = pData.profiles.find((p: any) => p.ticket_id === data.id);
+            if (prof) setGeneratedProfile(prof);
+          }
+        } catch(e) { console.error('Erreur chargement profil', e); }
+      }
 
       // Construire l'historique à partir des données disponibles
       const hist: any[] = [
@@ -226,6 +257,8 @@ export function TicketDetailPage() {
       }
     } finally { setFeedbackLoading(false); }
   };
+
+  useEffect(() => {
     fetchUserInfo();
     fetchTicket();
     fetchExistingFeedback();
@@ -394,47 +427,59 @@ export function TicketDetailPage() {
 
   return (
     <div className="space-y-6 pb-12">
-      <div className="flex items-center gap-4">
-        <button onClick={() => navigate('/tickets')} className="p-2 hover:bg-white rounded-lg transition-colors">
-          <ArrowLeft size={24} className="text-[#64748B]" />
+      <div className="flex items-center gap-4 bg-white p-4 rounded-xl border border-[#E2E8F0] shadow-sm">
+        <button 
+          onClick={() => navigate('/tickets')} 
+          className="p-3 hover:bg-[#F1F5F9] rounded-xl transition-all active:scale-95 group"
+        >
+          <ArrowLeft size={24} className="text-[#64748B] group-hover:text-[#003087]" />
         </button>
         <div className="flex-1">
-          <h1 className="text-3xl font-bold text-[#1E2937] mb-2">Détail du Ticket</h1>
-          <div className="flex items-center gap-3 flex-wrap">
-            <span className="text-xl font-semibold text-[#003087]">{ticket.ref}</span>
-            <Badge className={`${getStatutBadgeColor(ticket.status)} border`}>
+          <div className="flex items-center gap-2 text-sm text-[#64748B] mb-1">
+            <span className="hover:underline cursor-pointer" onClick={() => navigate('/tickets')}>Tickets</span>
+            <span>/</span>
+            <span className="font-medium text-[#003087]">{ticket.ref}</span>
+          </div>
+          <h1 className="text-2xl font-bold text-[#1E2937] flex items-center gap-3">
+            Détails de la demande
+            <Badge className={`${getStatutBadgeColor(ticket.status)} border px-3 py-1 text-xs uppercase tracking-wider font-bold`}>
               {getStatutFrancais(ticket.status)}
             </Badge>
-            {ticket.assigned_to && (
-              <Badge className="bg-purple-100 text-purple-800 border-purple-300 border">
-                Assigné à: {ticket.assigned_to === 'SUPER_ADMIN' ? 'Super Admin' : 'Admin'}
-              </Badge>
-            )}
-            {ticket.ai_level && (
-              <Badge className={`${getNiveauBadgeColor(getNiveauAcces())} border`}>
-                <Brain size={14} className="mr-1 inline" />
-                IA: {getNiveauAcces()} ({getConfianceScore()}%)
-              </Badge>
-            )}
-          </div>
+          </h1>
         </div>
-        <button onClick={fetchTicket} className="p-2 hover:bg-white rounded-lg transition-colors" title="Actualiser">
-          <RefreshCw size={20} className="text-[#64748B]" />
-        </button>
+        <div className="flex items-center gap-3">
+          {ticket.ai_level && (
+            <div className={`flex items-center gap-2 px-4 py-2 rounded-xl border ${getNiveauBadgeColor(getNiveauAcces())} animate-pulse-subtle`}>
+              <Brain size={18} />
+              <div className="flex flex-col">
+                <span className="text-[10px] uppercase font-bold opacity-70 leading-none">Analyse IA</span>
+                <span className="text-sm font-black leading-none mt-1">{getNiveauAcces()}</span>
+              </div>
+            </div>
+          )}
+          <button 
+            onClick={fetchTicket} 
+            className="p-3 hover:bg-[#F1F5F9] rounded-xl transition-all text-[#64748B] hover:text-[#003087] border border-[#E2E8F0]" 
+            title="Actualiser"
+          >
+            <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
+          </button>
+        </div>
       </div>
 
       {ticket.status === 'REJECTED' && ticket.rejected_reason && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <div className="flex items-start gap-3">
-            <XCircle size={20} className="text-red-600 mt-0.5" />
+        <div className="bg-red-50 border-l-4 border-red-500 rounded-r-xl p-5 shadow-sm">
+          <div className="flex items-start gap-4">
+            <div className="bg-red-100 p-2 rounded-lg">
+              <XCircle size={24} className="text-red-600" />
+            </div>
             <div className="flex-1">
-              <p className="font-semibold text-red-800">Motif du rejet</p>
-              <p className="text-red-700 mt-1">{ticket.rejected_reason}</p>
-              {ticket.rejected_by && (
-                <p className="text-red-600 text-sm mt-2">
-                  Rejeté par : {ticket.rejected_by} le {new Date(ticket.rejected_at!).toLocaleString('fr-FR')}
-                </p>
-              )}
+              <p className="font-bold text-red-900 text-lg">Demande Rejetée</p>
+              <p className="text-red-700 mt-1 italic">"{ticket.rejected_reason}"</p>
+              <div className="flex items-center gap-4 mt-3 text-sm text-red-600 font-medium">
+                <span className="flex items-center gap-1"><User size={14} /> {ticket.rejected_by}</span>
+                <span className="flex items-center gap-1"><Clock size={14} /> {new Date(ticket.rejected_at!).toLocaleString('fr-FR')}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -442,19 +487,68 @@ export function TicketDetailPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
-          {/* Informations demandeur - inchangé */}
-          <div className="bg-white rounded-xl p-6 border border-[#E2E8F0] shadow-sm">
-            <h2 className="text-xl font-bold text-[#1E2937] mb-6 flex items-center gap-2">
-              <User className="text-[#003087]" size={24} />
-              Informations Demandeur
-            </h2>
-            <div className="grid grid-cols-2 gap-6">
-              <div><div className="text-sm text-[#64748B] mb-1">Nom complet</div><div className="text-[#1E2937] font-semibold">{ticket.employee_name}</div></div>
-              <div><div className="text-sm text-[#64748B] mb-1">Email</div><div className="text-[#1E2937] font-semibold flex items-center gap-2"><Mail size={16} />{ticket.employee_email}</div></div>
-              <div><div className="text-sm text-[#64748B] mb-1">Équipe</div><div className="text-[#1E2937] font-semibold flex items-center gap-2"><Users size={16} />{ticket.team_name}</div></div>
-              <div><div className="text-sm text-[#64748B] mb-1">Rôle</div><div className="text-[#1E2937] font-semibold flex items-center gap-2"><Briefcase size={16} />{ticket.role || 'Non spécifié'}</div></div>
-              <div><div className="text-sm text-[#64748B] mb-1">Date de création</div><div className="text-[#1E2937] font-semibold flex items-center gap-2"><Calendar size={16} />{new Date(ticket.created_at).toLocaleString('fr-FR')}</div></div>
-              <div><div className="text-sm text-[#64748B] mb-1">Environnements</div><div className="flex gap-1 flex-wrap">{ticket.requested_environments?.map((env) => (<Badge key={env} className="bg-blue-50 text-blue-700 border-blue-200 border"><Server size={12} className="mr-1" />{env}</Badge>))}</div></div>
+          {/* Informations demandeur */}
+          <div className="bg-white rounded-xl p-6 border border-[#E2E8F0] shadow-sm hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-[#1E2937] flex items-center gap-3">
+                <div className="p-2 bg-[#F8FAFC] rounded-lg text-[#003087] border border-[#E2E8F0]">
+                  <User size={24} />
+                </div>
+                Profil du Demandeur
+              </h2>
+              <Badge className="bg-[#F1F5F9] text-[#64748B] border-[#E2E8F0] border px-2 py-0.5 font-mono text-[10px]">
+                ID: {ticket.employee_id}
+              </Badge>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-y-6 gap-x-8">
+              <div className="flex items-start gap-4">
+                <div className="p-2 bg-slate-50 rounded-lg text-slate-400 group-hover:text-[#003087] transition-colors"><User size={18} /></div>
+                <div>
+                  <div className="text-[10px] text-[#64748B] font-bold uppercase tracking-widest mb-0.5">Nom complet</div>
+                  <div className="text-[#1E2937] font-bold">{ticket.employee_name}</div>
+                </div>
+              </div>
+              <div className="flex items-start gap-4">
+                <div className="p-2 bg-slate-50 rounded-lg text-slate-400"><Mail size={18} /></div>
+                <div>
+                  <div className="text-[10px] text-[#64748B] font-bold uppercase tracking-widest mb-0.5">Email Professionnel</div>
+                  <div className="text-[#1E2937] font-bold">{ticket.employee_email}</div>
+                </div>
+              </div>
+              <div className="flex items-start gap-4">
+                <div className="p-2 bg-slate-50 rounded-lg text-slate-400"><Users size={18} /></div>
+                <div>
+                  <div className="text-[10px] text-[#64748B] font-bold uppercase tracking-widest mb-0.5">Équipe / Département</div>
+                  <div className="text-[#1E2937] font-bold">{ticket.team_name}</div>
+                </div>
+              </div>
+              <div className="flex items-start gap-4">
+                <div className="p-2 bg-slate-50 rounded-lg text-slate-400"><Briefcase size={18} /></div>
+                <div>
+                  <div className="text-[10px] text-[#64748B] font-bold uppercase tracking-widest mb-0.5">Rôle / Fonction</div>
+                  <div className="text-[#1E2937] font-bold">{ticket.role || 'Non spécifié'}</div>
+                </div>
+              </div>
+              <div className="flex items-start gap-4">
+                <div className="p-2 bg-slate-50 rounded-lg text-slate-400"><Calendar size={18} /></div>
+                <div>
+                  <div className="text-[10px] text-[#64748B] font-bold uppercase tracking-widest mb-0.5">Date de demande</div>
+                  <div className="text-[#1E2937] font-bold">{new Date(ticket.created_at).toLocaleString('fr-FR')}</div>
+                </div>
+              </div>
+              <div className="flex items-start gap-4">
+                <div className="p-2 bg-slate-50 rounded-lg text-slate-400"><Server size={18} /></div>
+                <div>
+                  <div className="text-[10px] text-[#64748B] font-bold uppercase tracking-widest mb-0.5">Environnements cibles</div>
+                  <div className="flex gap-1.5 flex-wrap mt-1">
+                    {ticket.requested_environments?.map((env) => (
+                      <Badge key={env} className="bg-blue-50 text-blue-700 border-blue-200 border text-[10px] py-0 px-2 font-bold">
+                        {env}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -506,44 +600,112 @@ export function TicketDetailPage() {
                 </div>
               )}
 
-              {/* ── RAISON DE CLASSEMENT ── */}
-              <div className="bg-white rounded-lg p-4 border border-purple-200">
-                <div className="text-sm text-[#64748B] mb-3 font-semibold flex items-center gap-2">
-                  <Sparkles size={14} className="text-purple-500" />
-                  Raison de classement
+              {/* ── COHÉRENCE DE LA DÉCISION (Requirement) ── */}
+              {ticket.classification?.consistency_status && (
+                <div className={`rounded-xl p-5 border-2 ${
+                  ticket.classification.consistency_status === 'OK' 
+                    ? 'bg-emerald-50 border-emerald-100/50 text-emerald-900 shadow-sm' 
+                    : 'bg-amber-50 border-amber-100/50 text-amber-900 shadow-sm'
+                } transition-all duration-300`}>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className={`p-2 rounded-lg ${
+                        ticket.classification.consistency_status === 'OK' ? 'bg-emerald-200/50' : 'bg-amber-200/50'
+                      }`}>
+                        {ticket.classification.consistency_status === 'OK' 
+                          ? <CheckCircle size={20} className="text-emerald-700" />
+                          : <AlertTriangle size={20} className="text-amber-700" />
+                        }
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-[10px] font-black uppercase tracking-widest opacity-60">Verdict Cohérence</span>
+                        <span className="text-base font-bold">Indice : {ticket.classification.consistency_status === 'OK' ? 'Décision Cohérente' : 'Ambiguïté Détectée'}</span>
+                      </div>
+                    </div>
+                    {ticket.classification.decision_source && (
+                      <Badge className="bg-white/50 border-white text-xs font-bold">
+                        {ticket.classification.decision_source}
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="text-sm leading-relaxed font-medium bg-white/30 p-3 rounded-lg border border-white/40">
+                    {ticket.classification.consistency_message}
+                  </p>
                 </div>
+              )}
+
+              {/* ── RAISON DE CLASSEMENT ── */}
+              <div className="bg-white rounded-xl p-5 border border-purple-100 shadow-sm hover:shadow-md transition-shadow">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="text-sm text-[#64748B] font-black uppercase tracking-tighter flex items-center gap-2">
+                    <Sparkles size={16} className="text-purple-500" />
+                    Justification du Diagnostic
+                  </div>
+                  {ticket.classification?.risk_score_rules !== undefined && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-bold text-[#64748B]">SCORE MÉTIER :</span>
+                      <span className={`text-sm font-black ${ticket.classification.risk_score_rules > 80 ? 'text-red-600' : 'text-emerald-600'}`}>
+                        {ticket.classification.risk_score_rules} pts
+                      </span>
+                    </div>
+                  )}
+                </div>
+                
                 {ticket.ai_explanation ? (
-                  <div className="space-y-3">
-                    <p className="text-[#1E2937] text-sm leading-relaxed whitespace-pre-line">
-                      {ticket.ai_explanation}
-                    </p>
-                    {/* Facteurs de risque (breakdown) */}
-                    {ticket.ai_risk_factors && Object.keys(ticket.ai_risk_factors).length > 0 && (
-                      <div className="mt-3 space-y-2 border-t border-gray-100 pt-3">
-                        <div className="text-xs font-semibold text-[#64748B] mb-2">Facteurs détectés</div>
-                        {Object.entries(ticket.ai_risk_factors)
-                          .sort(([, a], [, b]) => Math.abs(b[0]) - Math.abs(a[0]))
-                          .map(([key, [pts, desc]]) => (
-                            <div key={key} className="flex items-center gap-3">
-                              <span className={`text-xs font-bold w-14 text-right shrink-0 ${pts > 0 ? 'text-red-500' : 'text-green-600'}`}>
-                                {pts > 0 ? `+${pts}` : pts} pts
-                              </span>
-                              <div className="flex-1">
-                                <div className="text-xs text-[#1E2937] mb-1">{desc}</div>
-                                <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
-                                  <div
-                                    className={`h-full rounded-full ${pts > 30 ? 'bg-red-500' : pts > 0 ? 'bg-amber-400' : 'bg-green-400'}`}
-                                    style={{ width: `${Math.min(Math.abs(pts), 50) * 2}%` }}
-                                  />
-                                </div>
-                              </div>
+                  <div className="space-y-4">
+                    <div className="p-4 bg-[#F8FAFC] rounded-xl border border-blue-50 text-[#1E2937] text-sm leading-relaxed font-medium italic relative">
+                      <div className="absolute top-0 right-0 p-2 opacity-5">
+                        <Brain size={48} />
+                      </div>
+                      "{ticket.ai_explanation}"
+                    </div>
+
+                    {/* Règles expertes triggered_rules */}
+                    {ticket.classification?.triggered_rules && ticket.classification.triggered_rules.length > 0 && (
+                      <div className="space-y-2">
+                        <div className="text-[10px] font-black text-[#64748B] uppercase tracking-widest">Règles expertes appliquées :</div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {ticket.classification.triggered_rules.map((rule, ri) => (
+                            <div key={ri} className="flex items-center gap-2 py-1 px-2.5 bg-slate-50 border border-slate-100 rounded-lg text-[11px] font-medium text-slate-600">
+                              <Shield size={10} className="text-blue-400" />
+                              {rule}
                             </div>
                           ))}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Facteurs de risque (breakdown) */}
+                    {ticket.ai_risk_factors && Object.keys(ticket.ai_risk_factors).length > 0 && (
+                      <div className="space-y-3 pt-2">
+                        <div className="text-[10px] font-black text-[#64748B] uppercase tracking-widest">Analyse granulaire des points de risque :</div>
+                        <div className="grid grid-cols-1 gap-2">
+                          {Object.entries(ticket.ai_risk_factors)
+                            .sort(([, a], [, b]) => Math.abs(b[0]) - Math.abs(a[0]))
+                            .map(([key, [pts, desc]]) => (
+                              <div key={key} className="flex items-center gap-4 bg-[#F8FAFC]/50 p-2 rounded-lg border border-transparent hover:border-slate-200 transition-all">
+                                <div className={`w-12 text-right shrink-0 font-black text-sm ${pts > 0 ? 'text-red-500' : 'text-emerald-600'}`}>
+                                  {pts > 0 ? `+${pts}` : pts}
+                                </div>
+                                <div className="flex-1">
+                                  <div className="text-[11px] font-bold text-[#1E2937]">{desc}</div>
+                                  <div className="h-1 mt-1 rounded-full bg-slate-100 overflow-hidden">
+                                    <div
+                                      className={`h-full rounded-full transition-all duration-1000 ${pts > 40 ? 'bg-red-500' : pts > 20 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                                      style={{ width: `${Math.min(Math.abs(pts), 60) * 1.6}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                        </div>
                       </div>
                     )}
                   </div>
                 ) : (
-                  <p className="text-[#64748B] text-sm italic">Aucune explication disponible (modèle non chargé)</p>
+                  <div className="p-4 bg-slate-50 rounded-xl text-center italic text-[#64748B] text-sm">
+                    En attente d'analyse structurée...
+                  </div>
                 )}
               </div>
 
@@ -608,14 +770,113 @@ export function TicketDetailPage() {
             </div>
           </div>
 
+          {/* ── PROFIL GÉNÉRÉ (Si approuvé) ──────────────────────────────────────────────── */}
+          {generatedProfile && (
+            <div className="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl p-6 border border-emerald-200 shadow-sm mb-6 relative overflow-hidden">
+              <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
+                <Key size={100} className="text-emerald-500" />
+              </div>
+              <div className="flex items-center justify-between mb-5 relative z-10">
+                 <h2 className="text-xl font-bold text-emerald-900 flex items-center gap-3">
+                    <div className="p-2 bg-emerald-100 rounded-lg text-emerald-700">
+                      <Key size={24} />
+                    </div>
+                    Habilitation Créée Automatiquement
+                 </h2>
+                 <Badge className="bg-emerald-600 text-white font-bold tracking-wider py-1 px-3">
+                   COMPTE ACTIF
+                 </Badge>
+              </div>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 p-5 bg-white/60 backdrop-blur-sm rounded-xl border border-emerald-100/50 shadow-inner relative z-10">
+                 <div>
+                    <div className="text-[10px] font-black text-emerald-800/60 uppercase tracking-widest mb-1">Compte Généré</div>
+                    <div className="font-mono text-base font-bold text-emerald-900 flex items-center gap-2">
+                      {generatedProfile.account_name}
+                    </div>
+                 </div>
+                 <div>
+                    <div className="text-[10px] font-black text-emerald-800/60 uppercase tracking-widest mb-1">Système Cible</div>
+                    <div className="text-sm font-bold text-[#1E2937]">{generatedProfile.system_name}</div>
+                 </div>
+                 <div>
+                    <div className="text-[10px] font-black text-emerald-800/60 uppercase tracking-widest mb-1">Application</div>
+                    <div className="text-sm font-bold text-[#1E2937]">{generatedProfile.application}</div>
+                 </div>
+                 <div>
+                    <div className="text-[10px] font-black text-emerald-800/60 uppercase tracking-widest mb-1">Notification Email</div>
+                    <div className="text-sm font-bold text-emerald-600 flex items-center gap-1.5">
+                      <CheckCircle size={16}/> {generatedProfile.notification_sent ? 'Envoyée à l\'employé' : 'En attente'}
+                    </div>
+                 </div>
+              </div>
+            </div>
+          )}
+
           {/* Accès demandés */}
-          <div className="bg-white rounded-xl p-6 border border-[#E2E8F0] shadow-sm">
-            <h2 className="text-xl font-bold text-[#1E2937] mb-6 flex items-center gap-2"><ShieldCheck className="text-[#003087]" size={24} />Accès Demandés</h2>
-            <div className="p-4 bg-[#F8FAFC] rounded-lg border border-[#E2E8F0]">
-              <div className="font-semibold text-[#1E2937] mb-2">Types d'accès demandés</div>
-              <div className="flex gap-2 flex-wrap">{ticket.requested_access_details?.access_types?.map((type, idx) => (<Badge key={idx} className="bg-gray-100 text-gray-700 border-gray-200">{type}</Badge>))}</div>
-              {ticket.requested_access_details?.justification && (<><div className="font-semibold text-[#1E2937] mt-4 mb-2">Justification</div><div className="text-[#64748B]">{ticket.requested_access_details.justification}</div></>)}
-              <div className="font-semibold text-[#1E2937] mt-4 mb-2">Description</div><div className="text-[#64748B]">{ticket.description}</div>
+          <div className="bg-white rounded-xl p-6 border border-[#E2E8F0] shadow-sm hover:shadow-md transition-shadow uppercase-headers">
+            <h2 className="text-xl font-bold text-[#1E2937] mb-6 flex items-center gap-3">
+              <div className="p-2 bg-[#F8FAFC] rounded-lg text-[#003087] border border-[#E2E8F0]">
+                <ShieldCheck size={24} />
+              </div>
+              Détails techniques de l'accès
+            </h2>
+            <div className="space-y-6">
+              <div className="p-5 bg-[#F8FAFC] rounded-2xl border border-[#E2E8F0] relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
+                  <Database size={64} />
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div>
+                    <div className="text-[10px] font-black text-[#64748B] uppercase tracking-widest mb-3">Privilèges requis :</div>
+                    <div className="flex gap-2 flex-wrap">
+                      {ticket.requested_access_details?.access_types?.map((type, idx) => (
+                        <div key={idx} className="flex items-center gap-2 px-3 py-1.5 bg-white border border-blue-100 text-blue-800 rounded-xl text-xs font-black shadow-sm">
+                          <Key size={12} className="text-blue-400" />
+                          {type}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-black text-[#64748B] uppercase tracking-widest mb-3">Application cible :</div>
+                    <div className="inline-flex items-center gap-2 px-4 py-2 bg-[#003087] text-white rounded-xl text-sm font-bold shadow-md">
+                      <Cpu size={16} />
+                      {ticket.requested_access_details?.application || 'Standard'}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-8">
+                  <div className="text-[10px] font-black text-[#64748B] uppercase tracking-widest mb-3">Contexte & Justification métier :</div>
+                  <div className="p-4 bg-white/80 backdrop-blur-sm rounded-xl border border-slate-100 text-sm text-[#1E2937] leading-relaxed italic">
+                    {ticket.requested_access_details?.justification || "Aucune justification détaillée fournie par l'utilisateur."}
+                  </div>
+                </div>
+
+                <div className="mt-6 flex items-center justify-between pt-6 border-t border-slate-200">
+                  <div className="flex items-center gap-4">
+                    <div className="flex flex-col">
+                      <span className="text-[10px] font-black text-[#64748B] uppercase tracking-widest">Criticité Déclarée</span>
+                      <span className="font-bold text-sm text-[#1E2937]">{ticket.requested_access_details?.criticite || 'BASE'}</span>
+                    </div>
+                    <div className="w-px h-8 bg-slate-200"></div>
+                    <div className="flex flex-col">
+                      <span className="text-[10px] font-black text-[#64748B] uppercase tracking-widest">Séniorité</span>
+                      <span className="font-bold text-sm text-[#1E2937] capitalize">{ticket.requested_access_details?.user_seniority || 'non précisée'}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-5 bg-slate-50 rounded-2xl border border-dashed border-slate-300">
+                <div className="text-[10px] font-black text-[#64748B] uppercase tracking-widest mb-2 flex items-center gap-2">
+                  <FileCode size={14} /> Description textuelle brute (iTop) :
+                </div>
+                <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                  {ticket.description}
+                </p>
+              </div>
             </div>
           </div>
         </div>
@@ -623,38 +884,115 @@ export function TicketDetailPage() {
         {/* Colonne latérale - Actions */}
         <div className="lg:sticky lg:top-24 space-y-6 self-start lg:h-fit">
           <div className="bg-white rounded-xl p-6 border border-[#E2E8F0] shadow-sm">
-            <h3 className="text-lg font-bold text-[#1E2937] mb-4">Actions</h3>
-            <div className="space-y-3">
+            <h3 className="text-lg font-bold text-[#1E2937] mb-4 flex items-center gap-2">
+              <Shield size={18} className="text-[#003087]" />
+              Actions de Décision
+            </h3>
+            <div className="space-y-4">
               {(ticket.status === 'NEW' || ticket.status === 'ASSIGNED') && userCanAct && (
                 <>
-                  <button onClick={handleApprove} disabled={actionLoading} className="w-full py-3 bg-[#10B981] text-white rounded-lg font-semibold hover:bg-[#059669] transition-colors flex items-center justify-center gap-2 disabled:opacity-50">
-                    <CheckCircle size={20} /> {actionLoading ? 'Traitement...' : 'Approuver'}
+                  <button 
+                    onClick={handleApprove} 
+                    disabled={actionLoading} 
+                    className="w-full py-4 bg-[#003087] text-white rounded-xl font-black hover:bg-[#002066] transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 shadow-lg shadow-blue-100 uppercase tracking-wider text-sm"
+                  >
+                    <CheckCircle size={20} /> {actionLoading ? 'Traitement...' : 'Approuver Demande'}
                   </button>
-                  <button onClick={() => setShowRejectModal(true)} disabled={actionLoading} className="w-full py-3 bg-[#EF4444] text-white rounded-lg font-semibold hover:bg-[#DC2626] transition-colors flex items-center justify-center gap-2 disabled:opacity-50">
-                    <XCircle size={20} /> Rejeter
+                  <button 
+                    onClick={() => setShowRejectModal(true)} 
+                    disabled={actionLoading} 
+                    className="w-full py-3 bg-white text-[#EF4444] border-2 border-[#EF4444] rounded-xl font-bold hover:bg-[#EF4444] hover:text-white transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 uppercase tracking-wider text-xs"
+                  >
+                    <XCircle size={18} /> Rejeter la demande
                   </button>
+                  
+                  {/* Recommandation IA */}
+                  {(ticket.ai_recommended_action || ticket.classification?.recommended_action) && (
+                    <div className="mt-4 p-4 bg-blue-50 rounded-2xl border border-blue-100 relative overflow-hidden group">
+                      <div className="absolute -right-2 -top-2 opacity-5 group-hover:opacity-10 transition-opacity">
+                        <Brain size={64} />
+                      </div>
+                      <div className="flex items-start gap-3 relative z-10">
+                        <div className="p-2 bg-white rounded-lg shadow-sm text-blue-600">
+                          <Brain size={18} />
+                        </div>
+                        <div>
+                          <div className="text-[10px] font-black text-blue-800 uppercase tracking-widest leading-tight">Recommandation IA</div>
+                          <div className="text-sm font-black text-blue-900 mt-1">
+                            {(() => {
+                              const action = ticket.ai_recommended_action || ticket.classification?.recommended_action;
+                              switch(action) {
+                                case 'AUTO_APPROVE': return 'Approbation de routine';
+                                case 'BLOCK': return 'Blocage de sécurité requis';
+                                case 'MANUAL_REVIEW': return 'Revue manuelle approfondie';
+                                default: return action;
+                              }
+                            })()}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
               {(ticket.status === 'NEW' || ticket.status === 'ASSIGNED') && !userCanAct && (
-                <div className="p-4 bg-gray-50 rounded-lg text-center">
-                  <p className="text-gray-600 text-sm">Ce ticket n'est pas assigné à votre rôle</p>
-                  <p className="text-gray-500 text-xs mt-1">Assigné à: {ticket.assigned_to === 'SUPER_ADMIN' ? 'Super Admin' : ticket.assigned_to?.includes('ADMIN') ? 'Admin' : 'En attente'}</p>
+                <div className="p-6 bg-slate-50 rounded-2xl text-center border border-slate-200 border-dashed">
+                  <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3 text-slate-400">
+                    <Shield size={24} />
+                  </div>
+                  <p className="text-[#1E2937] font-bold text-sm">Action Restreinte</p>
+                  <p className="text-slate-500 text-xs mt-1">Ce ticket est assigné au rôle :</p>
+                  <Badge className="mt-2 bg-[#003087] text-white border-0 font-black px-3 py-1">
+                    {ticket.assigned_to === 'SUPER_ADMIN' ? 'SUPER ADMIN' : ticket.assigned_to?.includes('ADMIN') ? 'ADMINISTRATEUR' : 'EN ATTENTE'}
+                  </Badge>
                 </div>
               )}
-              {ticket.status === 'APPROVED' && (<div className="p-4 bg-green-50 rounded-lg text-center"><CheckCircle className="mx-auto mb-2 text-green-600" size={32} /><p className="text-green-800 font-semibold">Ticket approuvé</p><p className="text-green-600 text-sm">Les accès ont été attribués</p></div>)}
-              {ticket.status === 'REJECTED' && (<div className="p-4 bg-red-50 rounded-lg text-center"><XCircle className="mx-auto mb-2 text-red-600" size={32} /><p className="text-red-800 font-semibold">Ticket rejeté</p></div>)}
+              {ticket.status === 'APPROVED' && (
+                <div className="p-6 bg-emerald-50 rounded-2xl text-center border border-emerald-100">
+                  <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4 text-emerald-600 shadow-inner">
+                    <CheckCircle size={32} />
+                  </div>
+                  <p className="text-emerald-900 font-black uppercase tracking-widest text-sm">Demande Approuvée</p>
+                  <p className="text-emerald-700/70 text-xs mt-2 font-medium">Les accès ont été synchronisés et provisionnés.</p>
+                </div>
+              )}
+              {ticket.status === 'REJECTED' && (
+                <div className="p-6 bg-red-50 rounded-2xl text-center border border-red-100">
+                  <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4 text-red-600 shadow-inner">
+                    <XCircle size={32} />
+                  </div>
+                  <p className="text-red-900 font-black uppercase tracking-widest text-sm">Demande Rejetée</p>
+                  <p className="text-red-700/70 text-xs mt-2 font-medium">Le demandeur a été notifié du motif de refus.</p>
+                </div>
+              )}
             </div>
           </div>
 
-          <div className="bg-white rounded-xl p-6 border border-[#E2E8F0] shadow-sm">
-            <h3 className="text-lg font-bold text-[#1E2937] mb-4 flex items-center gap-2"><Clock size={20} />Historique</h3>
-            <div className="space-y-4 max-h-[50vh] overflow-y-auto">
-              {historique.map((event) => (
-                <div key={event.id} className="relative pl-6 pb-4 border-l-2 border-[#E2E8F0] last:border-0 last:pb-0">
-                  <div className="absolute -left-[9px] top-0 w-4 h-4 bg-[#003087] rounded-full border-2 border-white"></div>
-                  <div className="text-xs text-[#64748B] mb-1">{new Date(event.date).toLocaleString('fr-FR')}</div>
-                  <div className="font-semibold text-[#1E2937] text-sm mb-1">{event.action}</div>
-                  <div className="text-sm text-[#64748B]"><span className="font-medium">{event.acteur}</span> - {event.details}</div>
+          <div className="bg-white rounded-xl p-6 border border-[#E2E8F0] shadow-sm relative overflow-hidden">
+            <h3 className="text-lg font-bold text-[#1E2937] mb-6 flex items-center gap-2">
+              <Clock size={20} className="text-[#64748B]" />
+              Fil d'audit du ticket
+            </h3>
+            <div className="space-y-0 relative">
+              <div className="absolute left-[11px] top-2 bottom-2 w-0.5 bg-gradient-to-b from-[#003087] via-[#E2E8F0] to-transparent"></div>
+              {historique.map((event, idx) => (
+                <div key={event.id} className="relative pl-10 pb-8 last:pb-0 group">
+                  <div className={`absolute left-0 top-1 w-6 h-6 rounded-full border-4 border-white shadow-md flex items-center justify-center z-10 transition-transform group-hover:scale-110 ${
+                    idx === 0 ? 'bg-[#003087] animate-pulse-subtle' : 'bg-[#E2E8F0]'
+                  }`}>
+                    {idx === 0 && <CheckCircle size={10} className="text-white" />}
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[10px] font-black text-[#94A3B8] uppercase tracking-widest">{new Date(event.date).toLocaleString('fr-FR')}</span>
+                    <span className="font-black text-[#1E2937] text-sm mt-1 group-hover:text-[#003087] transition-colors">{event.action}</span>
+                    <div className="text-xs text-[#64748B] mt-2 bg-[#F8FAFC] p-3 rounded-xl border border-[#F1F5F9] group-hover:border-[#E2E8F0] transition-colors">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <User size={10} />
+                        <span className="font-black text-[#003087] uppercase text-[9px] tracking-widest">{event.acteur}</span>
+                      </div>
+                      {event.details}
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>

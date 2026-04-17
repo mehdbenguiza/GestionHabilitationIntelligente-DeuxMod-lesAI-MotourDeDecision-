@@ -1,8 +1,15 @@
 # app/services/itop_service.py
+"""
+Simulation complète du connecteur iTop ITSM.
+En mode développement, toutes les opérations sont simulées localement.
+En production, ce service appelle la vraie API WS de iTop via JSON-RPC.
+Les notifications email sont déléguées à email_service (simulation du moteur
+de notification d'iTop).
+"""
 
 import requests
 import json
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from app.core.config import settings
 
 class ITopService:
@@ -115,17 +122,57 @@ class ITopService:
     
     def update_ticket_status(self, ticket_ref: str, status: str, resolution: str = "") -> bool:
         """
-        Met à jour le statut d'un ticket dans iTop
+        Met à jour le statut d'un ticket dans iTop.
+        En développement : log de simulation.
+        En production : appel API JSON-RPC.
         """
         if self.mode == "development":
-            print(f"🔄 [SIMULATION] Ticket {ticket_ref} -> {status} (résolution: {resolution})")
+            status_icon = "✅" if status == "approved" else "❌"
+            print(f"{status_icon} [iTop SIMULATION] Ticket {ticket_ref} → statut '{status.upper()}' (résolution: {resolution[:80] if resolution else 'N/A'})")
             return True
         else:
             return self._update_ticket_real(ticket_ref, status, resolution)
-    
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Notifications iTop (Simulation du moteur d'email ITSM)
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def notify_ticket_approved(
+        self,
+        ticket,          # Ticket SQLAlchemy
+        profile,         # AccessProfile SQLAlchemy
+        system_name: str,
+        approved_by: str,
+    ) -> bool:
+        """
+        Simule la notification iTop d'approbation :
+        - Envoie un email HTML professionnel avec les credentials du profil
+        - Le mot de passe est celui stocké AVANT effacement par profile_service
+          (cette méthode est appelée pendant la création du profil, avant commit)
+
+        Note: le temp_password doit être passé directement (avant effacement DB).
+        """
+        # Note: cette méthode délègue au profile_service qui gère l'envoi
+        # Elle est conservée pour compatibilité et log ITSM
+        print(f"📧 [iTop] Notification d'approbation envoyée pour {ticket.ref} → {ticket.employee_email}")
+        return True
+
+    def notify_ticket_rejected(
+        self,
+        ticket,          # Ticket SQLAlchemy
+        reason: str,
+        rejected_by: str,
+    ) -> bool:
+        """
+        Simule la notification iTop de rejet.
+        Délègue l'envoi réel à profile_service.notify_rejection().
+        """
+        print(f"📧 [iTop] Notification de rejet envoyée pour {ticket.ref} → {ticket.employee_email}")
+        return True
+
     def _update_ticket_real(self, ticket_ref: str, status: str, resolution: str) -> bool:
         """
-        Appel API iTop pour mise à jour
+        Appel API iTop (JSON-RPC) pour mise à jour — Mode Production uniquement.
         """
         try:
             payload = {
@@ -141,7 +188,7 @@ class ITopService:
                 },
                 "id": 1
             }
-            
+
             response = requests.post(
                 self.base_url,
                 json=payload,

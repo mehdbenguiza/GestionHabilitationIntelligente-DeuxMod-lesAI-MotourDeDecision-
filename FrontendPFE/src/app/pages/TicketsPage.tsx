@@ -40,7 +40,7 @@ export function TicketsPage() {
   const [filterNiveau, setFilterNiveau] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [likedTickets, setLikedTickets] = useState<number[]>([]);
-  const itemsPerPage = 50;
+  const itemsPerPage = 10;
 
   const token = localStorage.getItem('token');
 

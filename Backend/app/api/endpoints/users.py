@@ -10,6 +10,7 @@ from app.models.login_history import LoginHistory
 from app.core.dependencies import require_super_admin, get_current_user
 from app.services.user_service import UserService
 from app.schemas.user import UserUpdate
+from app.services.audit_service import audit_service
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -121,13 +122,12 @@ def update_profile(
         email=profile_data.get("email")
     )
 
-    login_history = LoginHistory(
+    audit_service.log_security(
+        db=db,
         user_id=current_user.id,
         action="Modification du profil",
-        ip_address="127.0.0.1",
         details="Informations personnelles mises à jour"
     )
-    db.add(login_history)
     db.commit()
 
     return {"msg": "Profil mis à jour avec succès"}
@@ -147,13 +147,12 @@ def change_password(
         password_data["newPassword"]
     )
 
-    login_history = LoginHistory(
+    audit_service.log_security(
+        db=db,
         user_id=current_user.id,
         action="Changement de mot de passe",
-        ip_address="127.0.0.1",
         details="Mot de passe modifié"
     )
-    db.add(login_history)
     db.commit()
 
     return {"msg": "Mot de passe changé avec succès"}

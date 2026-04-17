@@ -2,82 +2,19 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from typing import List, Optional, Any
+from typing import List, Optional
 from app.database import get_db
 from app.services.ticket_service import TicketService
 from app.core.dependencies import get_current_user
 from app.models.user import DashboardUser
-from app.models.ticket import TicketStatus, Ticket
+from app.models.ticket import TicketStatus
+from app.schemas.ticket import TicketResponse
 
 router = APIRouter(prefix="/tickets", tags=["tickets"])
 
 
 def get_ticket_service(db: Session = Depends(get_db)) -> TicketService:
     return TicketService(db)
-
-
-def serialize_ticket(ticket: Ticket) -> dict:
-    """
-    ✅ Sérialise un ticket en dict incluant les champs IA plats.
-    """
-    classification = getattr(ticket, 'classification', None)
-
-    result = {
-        "id": ticket.id,
-        "ref": ticket.ref,
-        "status": ticket.status.value if hasattr(ticket.status, 'value') else ticket.status,
-        "employee_id": ticket.employee_id,
-        "employee_name": ticket.employee_name,
-        "employee_email": ticket.employee_email,
-        "team_name": ticket.team_name,
-        "role": ticket.role,
-        "description": ticket.description,
-        "requested_environments": ticket.requested_environments,
-        "requested_access_details": ticket.requested_access_details,
-        "created_at": ticket.created_at.isoformat() if ticket.created_at else None,
-        "updated_at": ticket.updated_at.isoformat() if ticket.updated_at else None,
-        "assigned_to": ticket.assigned_to,
-        "assigned_at": ticket.assigned_at.isoformat() if ticket.assigned_at else None,
-        "rejected_reason": ticket.rejected_reason,
-        "rejected_by": ticket.rejected_by,
-        "rejected_at": ticket.rejected_at.isoformat() if ticket.rejected_at else None,
-
-        # ✅ Champs IA plats
-        "ai_level":        getattr(ticket, 'ai_level', None),
-        "ai_confidence":   getattr(ticket, 'ai_confidence', None),
-        "ai_probabilities": getattr(ticket, 'ai_probabilities', None),
-        "ai_risk_score":   getattr(ticket, 'ai_risk_score', None),
-        "ai_consistency":  getattr(ticket, 'ai_consistency', None),
-        "ai_recommended_action": getattr(ticket, 'ai_recommended_action', None),
-
-        # ✅ Nouveaux champs explainability
-        "ai_explanation":  classification.explanation  if classification else None,
-        "ai_risk_factors": classification.risk_factors if classification else None,
-        "ai_source":       classification.source       if classification else None,
-
-        # Objet classification complet imbriqué
-        "classification": {
-            "predicted_level": classification.predicted_level,
-            "confidence":      round(classification.confidence, 2) if classification.confidence else 0,
-            "probabilities":   classification.probabilities,
-            "explanation":     classification.explanation,
-            "risk_factors":    classification.risk_factors,
-            "source":          classification.source,
-            "model_version":   classification.model_version,
-            "processed_at":    classification.processed_at.isoformat() if classification.processed_at else None,
-            
-            # Nouveaux champs d'audit
-            "risk_score_rules":       classification.risk_score_rules,
-            "decision_source":        classification.decision_source,
-            "consistency_status":     classification.consistency_status,
-            "consistency_message":    classification.consistency_message,
-            "triggered_rules":        classification.triggered_rules,
-            "recommended_action":     classification.recommended_action,
-            "confidence_level_label": classification.confidence_level_label,
-        } if classification else None,
-    }
-    return result
-
 
 
 @router.get("/sync")
@@ -89,7 +26,7 @@ async def sync_tickets(
     return ticket_service.sync_from_itop()
 
 
-@router.get("", response_model=None)
+@router.get("", response_model=List[TicketResponse])
 async def get_tickets(
     status: Optional[TicketStatus] = None,
     team: Optional[str] = None,
@@ -99,19 +36,17 @@ async def get_tickets(
     current_user: DashboardUser = Depends(get_current_user)
 ):
     """Liste des tickets avec filtres optionnels — inclut les données IA"""
-    tickets = ticket_service.get_all_tickets(status, team, skip, limit)
-    return [serialize_ticket(t) for t in tickets]
+    return ticket_service.get_all_tickets(status, team, skip, limit)
 
 
-@router.get("/{ticket_id}", response_model=None)
+@router.get("/{ticket_id}", response_model=TicketResponse)
 async def get_ticket(
     ticket_id: int,
     ticket_service: TicketService = Depends(get_ticket_service),
     current_user: DashboardUser = Depends(get_current_user)
 ):
     """Détail d'un ticket — inclut les données IA"""
-    ticket = ticket_service.get_ticket_by_id(ticket_id)
-    return serialize_ticket(ticket)
+    return ticket_service.get_ticket_by_id(ticket_id)
 
 
 @router.post("/{ticket_id}/approve")
@@ -123,7 +58,7 @@ async def approve_ticket(
 ):
     """Approuver un ticket"""
     ticket = ticket_service.approve_ticket(ticket_id, current_user, resolution)
-    return {"message": "Ticket approuvé", "ticket_id": ticket.id, "ticket": serialize_ticket(ticket)}
+    return {"message": "Ticket approuvé", "ticket_id": ticket.id, "ticket": ticket}
 
 
 @router.post("/{ticket_id}/reject")
@@ -135,7 +70,7 @@ async def reject_ticket(
 ):
     """Rejeter un ticket avec motif obligatoire"""
     ticket = ticket_service.reject_ticket(ticket_id, reason, current_user)
-    return {"message": "Ticket rejeté", "ticket_id": ticket.id, "reason": reason, "ticket": serialize_ticket(ticket)}
+    return {"message": "Ticket rejeté", "ticket_id": ticket.id, "reason": reason, "ticket": ticket}
 
 
 @router.post("/{ticket_id}/escalate")
@@ -151,7 +86,7 @@ async def escalate_ticket(
         "message": f"Ticket escaladé vers {escalate_to}",
         "ticket_id": ticket.id,
         "escalated_to": escalate_to,
-        "ticket": serialize_ticket(ticket)
+        "ticket": ticket
     }
 
 

@@ -13,6 +13,7 @@ import { AuditLogsPage } from './pages/AuditLogsPage';
 import { AdminsPage } from './pages/AdminsPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { AILabPage } from './pages/AILabPage';
+import { HabilitationsPage } from './pages/HabilitationsPage';
 
 // Importer les loaders
 import { requireAuthLoader, requireSuperAdminLoader } from '../utils/authLoaders';
@@ -71,6 +72,10 @@ export const router = createBrowserRouter([
       {
         path: 'profile',
         element: <ProfilePage />,
+      },
+      {
+        path: 'habilitations',
+        element: <HabilitationsPage />,
       },
       {
         path: 'ai-lab',

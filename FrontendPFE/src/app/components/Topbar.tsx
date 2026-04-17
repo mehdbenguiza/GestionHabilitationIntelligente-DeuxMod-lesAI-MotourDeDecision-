@@ -94,7 +94,6 @@ export function Topbar() {
     return () => clearInterval(intervalId);
   }, []);
 
-  // ==================== FERMETURE DES MENUS ====================
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (profileRef.current && !profileRef.current.contains(event.target as Node)) {
@@ -107,6 +106,24 @@ export function Topbar() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  const markAsRead = (notif: Notification) => {
+    if (notif.read) return;
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    fetch(`http://127.0.0.1:8000/notifications/${notif.id}/read`, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    }).then(res => {
+      if(res.ok) {
+        setNotifications(notifications.map(n => n.id === notif.id ? { ...n, read: true } : n));
+      }
+    }).catch(console.error);
+  };
 
   const markAllAsRead = () => {
     const token = localStorage.getItem('token');
@@ -189,6 +206,7 @@ export function Topbar() {
                     notifications.map((notif: any) => (
                       <div 
                         key={notif.id} 
+                        onClick={() => markAsRead(notif)}
                         className={`p-4 border-b border-[#E2E8F0] last:border-0 hover:bg-[#F8FAFC] transition-colors cursor-pointer ${
                           !notif.read ? 'bg-blue-50/30' : ''
                         }`}
@@ -266,7 +284,18 @@ export function Topbar() {
                 </button>
                 <div className="border-t border-[#E2E8F0]"></div>
                 <button
-                  onClick={() => {
+                  onClick={async () => {
+                    const token = localStorage.getItem('token');
+                    if (token) {
+                      try {
+                        await fetch('http://127.0.0.1:8000/auth/logout', {
+                          method: 'POST',
+                          headers: { 'Authorization': `Bearer ${token}` }
+                        });
+                      } catch (e) {
+                        console.error('Logout error', e);
+                      }
+                    }
                     localStorage.removeItem('token');
                     navigate('/');
                     setShowProfileMenu(false);

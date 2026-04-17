@@ -15,6 +15,7 @@ from app.core.security import (
 )
 from app.core.dependencies import require_super_admin, get_current_user
 from app.core.email import send_reset_password_email
+from app.services.audit_service import audit_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -53,6 +54,15 @@ def login(
     user.lastLogin = datetime.utcnow()
     user.lastLoginIP = request.client.host if request.client else "127.0.0.1"
     
+    # Historique via AuditService
+    audit_service.log_security(
+        db=db,
+        user_id=user.id,
+        action="Connexion",
+        ip_address=user.lastLoginIP,
+        details="Ouverture de session"
+    )
+    
     # Création des tokens
     access_token = create_access_token(data={"sub": user.username, "role": user.role.value})
     refresh_token = create_refresh_token(data={"sub": user.username})
@@ -60,19 +70,18 @@ def login(
     # Stocker le refresh token en base (pour révocation)
     user.refresh_token = refresh_token
     
-    # Notification s'il est admin
+    # Notification via AuditService
     if user.role.value in ["SUPER_ADMIN", "ADMIN"]:
-        from app.models.notification import Notification
         display_name = user.fullName if user.fullName else user.username
         role_display = "Super Admin" if user.role.value == "SUPER_ADMIN" else "Admin"
         
-        notif = Notification(
+        audit_service.notify(
+            db=db,
             title=f"Connexion: {role_display}",
             message=f"{role_display} {display_name} vient de se connecter au dashboard.",
             type="info",
             target_roles="SUPER_ADMIN"
         )
-        db.add(notif)
     
     db.commit()
     
@@ -159,14 +168,12 @@ def register(
     db.commit()
     db.refresh(new_user)
     
-    login_history = LoginHistory(
+    audit_service.log_security(
+        db=db,
         user_id=new_user.id,
         action="Création du compte",
-        ip_address="127.0.0.1",
         details=f"Créé par {current_user.username}"
     )
-    db.add(login_history)
-    db.commit()
     
     return {"msg": f"Utilisateur {user.username} créé avec succès par {current_user.username}"}
 
@@ -178,6 +185,7 @@ def logout(
     db: Session = Depends(get_db)
 ):
     # Calculer la durée de la session
+    duration_str = "inconnue"
     if current_user.lastLogin:
         duration = datetime.utcnow() - current_user.lastLogin
         minutes = int(duration.total_seconds() // 60)
@@ -185,6 +193,14 @@ def logout(
         mins = minutes % 60
         duration_str = f"{hours}h {mins}min" if hours > 0 else f"{mins} min"
         current_user.lastSessionDuration = duration_str
+    
+    # Historique via AuditService
+    audit_service.log_security(
+        db=db,
+        user_id=current_user.id,
+        action="Déconnexion",
+        details=f"Fin de session (Durée: {duration_str})"
+    )
     
     # Supprimer le refresh token de la base
     current_user.refresh_token = None
@@ -261,14 +277,14 @@ async def request_password_reset(
             otp_code=otp_code
         )
         
-        # Enregistrer dans l'historique
-        login_history = LoginHistory(
+        # Enregistrer dans l'historique via AuditService
+        audit_service.log_security(
+            db=db,
             user_id=user.id,
             action="Demande de réinitialisation de mot de passe",
             ip_address=request.client.host if request.client else "127.0.0.1",
             details=f"Code envoyé à {email}"
         )
-        db.add(login_history)
         db.commit()
         
         return JSONResponse(
@@ -514,14 +530,13 @@ async def reset_password(
         print(f"🔐 Hachage du mot de passe (longueur finale: {len(new_password)})")
         user.passwordHash = get_password_hash(new_password)
         
-        # Enregistrer dans l'historique
-        login_history = LoginHistory(
+        # Enregistrer dans l'historique via AuditService
+        audit_service.log_security(
+            db=db,
             user_id=user.id,
             action="Réinitialisation de mot de passe",
-            ip_address="127.0.0.1",
             details="Mot de passe réinitialisé via forgot password"
         )
-        db.add(login_history)
         
         # Nettoyer le code
         del reset_codes[email]

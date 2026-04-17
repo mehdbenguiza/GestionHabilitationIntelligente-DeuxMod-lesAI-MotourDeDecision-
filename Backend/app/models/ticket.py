@@ -18,7 +18,7 @@ class Ticket(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     ref = Column(String(50), unique=True, index=True, nullable=False)
-    status = Column(Enum(TicketStatus), default=TicketStatus.NEW)
+    status = Column(Enum(TicketStatus), default=TicketStatus.NEW, index=True)
     
     # Informations demandeur
     employee_id = Column(String(50), nullable=False)
@@ -46,11 +46,16 @@ class Ticket(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     synced_at = Column(DateTime(timezone=True))
 
-    # ✅ Relation avec le moteur IA
-    classification = relationship("ClassificationResult", backref="ticket", uselist=False, cascade="all, delete-orphan")
+    # ✅ Relation avec le moteur IA (Historique des analyses)
+    classifications = relationship("ClassificationResult", back_populates="ticket", order_by="desc(ClassificationResult.processed_at)", cascade="all, delete-orphan")
+
+    @property
+    def classification(self):
+        """Helper pour obtenir la dernière classification en date (Compatibilité)"""
+        return self.classifications[0] if self.classifications else None
 
     # ✅ Champs dénormalisés pour la performance (Supervision/Filtres)
-    ai_level              = Column(String(20), nullable=True)
+    ai_level              = Column(String(20), nullable=True, index=True)
     ai_confidence         = Column(Float, nullable=True)
     ai_probabilities      = Column(JSON, nullable=True)
     ai_risk_score         = Column(Integer, nullable=True)

@@ -8,6 +8,8 @@ from app.api.endpoints.users import router as users_router
 from app.api.endpoints.tickets import router as tickets_router
 from app.api.endpoints.feedback import router as feedback_router
 from app.api.endpoints.employees import router as employees_router
+from app.api.endpoints.systemes import router as systemes_router
+from app.api.endpoints.profiles import router as profiles_router
 from app.database import engine, Base
 from datetime import datetime
 from app.api.endpoints.ai import router as ai_router
@@ -21,9 +23,10 @@ import app.models.decision_engine
 import app.models.audit_log
 import app.models.employee
 import app.models.ai_feedback   # ← Nouveau : feedback + corrections
+import app.models.systeme        # ← Nouveau : référentiel systèmes SI
+import app.models.access_profile # ← Nouveau : profils d'accès habilitations
 
-# Création des tables
-Base.metadata.create_all(bind=engine)
+
 
 app = FastAPI(
     title="Dashboard Intelligent iTop - Backend",
@@ -56,6 +59,8 @@ app.include_router(notifications_router)
 app.include_router(audit_router)
 app.include_router(feedback_router)
 app.include_router(employees_router)
+app.include_router(systemes_router)   # ← Nouveau : /systemes
+app.include_router(profiles_router)   # ← Nouveau : /profiles
 
 # Créer le répertoire uploads si inexistant
 os.makedirs("uploads/profiles", exist_ok=True)
@@ -72,7 +77,7 @@ async def log_requests(request, call_next):
         print(f"[HTTP] Status: {response.status_code}")
         return response
     except Exception as e:
-        print(f"[HTTP] ❌ ERREUR Interne: {e}")
+        print(f"[HTTP] ERREUR Interne: {e}")
         from fastapi.responses import JSONResponse
         return JSONResponse(
             status_code=500,
@@ -89,9 +94,36 @@ def health():
     return {"status": "ok", "timestamp": datetime.utcnow().isoformat()}
 @app.on_event("startup")
 async def startup_event():
-    print("🚀 Démarrage de l'application...")
+    # 1. Création des tables DB avec retry
+    print("[STARTUP] Initialisation de la base de donnees...")
+    try:
+        Base.metadata.create_all(bind=engine)
+        print("[STARTUP] Tables DB verifiees/creees avec succes")
+    except Exception as db_err:
+        print(f"[STARTUP] WARN: Erreur DB au demarrage (mode degrade): {db_err}")
+        print("[STARTUP] L'application demarre mais certaines fonctions peuvent etre indisponibles")
+
+    # 2. Seed des systèmes SI (si la table est vide)
+    try:
+        from app.database import SessionLocal
+        from app.models.systeme import Systeme
+        from scripts.seed_systemes import seed_systemes
+        db = SessionLocal()
+        try:
+            if db.query(Systeme).count() == 0:
+                seed_systemes(db)
+                print("[STARTUP] Systèmes SI seedés avec succès")
+            else:
+                print("[STARTUP] Systèmes SI déjà présents en base")
+        finally:
+            db.close()
+    except Exception as e:
+        print(f"[STARTUP] WARN: Erreur seed systèmes: {e}")
+
+    # 3. Chargement du modele IA
+    print("[STARTUP] Chargement du modele IA...")
     success = ai_service.load_models()
     if success:
-        print("✅ IA chargée avec succès")
+        print("[STARTUP] Modele IA charge avec succes")
     else:
-        print("❌ Échec du chargement de l'IA")
+        print("[STARTUP] WARN: Modele IA non charge - mode fallback actif")

@@ -19,6 +19,14 @@ Usage :
 
 import os
 import sys
+
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
+
 import json
 import pandas as pd
 import joblib
@@ -79,6 +87,18 @@ try:
         details = t.requested_access_details or {}
         envs    = t.requested_environments or []
 
+        # ✅ Lire la séniorité réelle depuis la table employees
+        from app.models.employee import Employee
+        emp_seniority = details.get("user_seniority", "senior")
+        emp_role      = t.role or details.get("role", "DEVELOPPEUR")
+        if t.employee_id:
+            real_emp = db.query(Employee).filter(Employee.id == t.employee_id).first()
+            if real_emp:
+                if real_emp.seniority:
+                    emp_seniority = real_emp.seniority
+                if real_emp.role:
+                    emp_role = real_emp.role
+
         if t.status == TicketStatus.APPROVED:
             if details.get("environment") == "PRD" or (envs and envs[0] == "PRD"):
                 label = "SENSITIVE"
@@ -91,12 +111,12 @@ try:
 
         row = {
             "team":                    t.team_name or "MOE",
-            "role":                    t.role or "DEVELOPPEUR",
+            "role":                    emp_role,
             "application":             details.get("application", "E_BANKING"),
             "environment":             envs[0] if envs else "DEV2",
             "access_type":             (details.get("access_types") or ["READ"])[0],
             "resource":                details.get("resource", "OTHER"),
-            "user_seniority":          details.get("user_seniority", "senior"),
+            "user_seniority":          emp_seniority,   # ✅ Source : table employees
             "request_reason":          details.get("request_reason", "maintenance_preventive"),
             "manager_approval_status": details.get("manager_approval_status", "none"),
             "label":                   label,

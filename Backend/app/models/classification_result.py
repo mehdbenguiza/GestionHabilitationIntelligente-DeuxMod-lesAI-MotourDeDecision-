@@ -3,12 +3,16 @@
 from sqlalchemy import Column, Integer, String, Float, DateTime, JSON, Text, ForeignKey
 from sqlalchemy.sql import func
 from app.database import Base
+from sqlalchemy.orm import relationship
 
 class ClassificationResult(Base):
     __tablename__ = "classification_results"
 
     id              = Column(Integer, primary_key=True, index=True)
     ticket_id       = Column(Integer, ForeignKey("tickets.id", ondelete="CASCADE"), nullable=False)
+    
+    # ✅ Relation inverse
+    ticket          = relationship("Ticket", back_populates="classifications")
     predicted_level = Column(String(20), nullable=False)
     confidence      = Column(Float, nullable=False)
     probabilities   = Column(JSON, nullable=True)

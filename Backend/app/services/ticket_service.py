@@ -7,36 +7,35 @@ import random
 from app.repositories.ticket_repository import TicketRepository
 from app.services.itop_service import ITopService
 from app.services.ai_service import ai_service
+from app.services.profile_service import profile_service
+from app.services.audit_service import audit_service
 from app.models.classification_result import ClassificationResult
 from app.models.ticket import Ticket, TicketStatus
 from app.models.user import DashboardUser
 from app.models.employee import Employee
-from app.models.audit_log import AuditLog
 from app.core.exceptions import NotFoundException, BusinessException
 from app.core.config import settings
 
 
-def _enrich_ticket_with_ai(ticket: Ticket, db: Session) -> Ticket:
+def _enrich_ticket_with_ai(ticket: Ticket) -> Ticket:
     """
-    Attach the latest ClassificationResult to a ticket and expose
-    ai_level / ai_confidence / ai_probabilities as flat attributes
-    that Pydantic will pick up in TicketResponse.
+    Remplir les champs plats 'ai_xxx' du ticket à partir de sa classification.
+    Cela évite de recalculer ces champs partout ailleurs.
     """
-    latest_classification = (
-        db.query(ClassificationResult)
-        .filter(ClassificationResult.ticket_id == ticket.id)
-        .order_by(ClassificationResult.processed_at.desc())
-        .first()
-    )
-
-    if latest_classification:
-        ticket.classification = latest_classification
-        # ✅ Ajouter les raccourcis plats pour le frontend
-        ticket.ai_level = latest_classification.predicted_level
-        ticket.ai_confidence = round(latest_classification.confidence, 2)
-        ticket.ai_probabilities = latest_classification.probabilities or {}
+    latest = ticket.classification
+    if latest:
+        ticket.ai_level = latest.predicted_level
+        ticket.ai_confidence = round(latest.confidence, 2)
+        ticket.ai_probabilities = latest.probabilities or {}
+        ticket.ai_risk_score = latest.risk_score_rules
+        ticket.ai_consistency = latest.consistency_status
+        ticket.ai_recommended_action = latest.recommended_action
+        
+        # Champs Explainability
+        ticket.ai_explanation = latest.explanation
+        ticket.ai_risk_factors = latest.risk_factors
+        ticket.ai_source = latest.source
     else:
-        ticket.classification = None
         ticket.ai_level = None
         ticket.ai_confidence = None
         ticket.ai_probabilities = None
@@ -59,9 +58,8 @@ class TicketService:
             query = query.filter(Ticket.team_name == team)
         tickets = query.order_by(Ticket.created_at.desc()).offset(skip).limit(limit).all()
 
-        # ✅ CORRECTION BUG 4 : Enrichir CHAQUE ticket avec ses données IA
         for ticket in tickets:
-            _enrich_ticket_with_ai(ticket, self.db)
+            _enrich_ticket_with_ai(ticket)
 
         return tickets
 
@@ -70,8 +68,7 @@ class TicketService:
         if not ticket:
             raise NotFoundException("Ticket")
 
-        # ✅ CORRECTION BUG 3 : Utiliser la fonction d'enrichissement commune
-        _enrich_ticket_with_ai(ticket, self.db)
+        _enrich_ticket_with_ai(ticket)
 
         return ticket
 
@@ -109,24 +106,47 @@ class TicketService:
     def approve_ticket(self, ticket_id: int, current_user: DashboardUser, resolution: str = "Demande approuvée") -> Ticket:
         ticket = self.get_ticket_by_id(ticket_id)
         ticket = self.ticket_repo.approve_ticket(ticket_id)
+
+        # ── 1. Créer le profil d'accès + envoyer l'email d'approbation (simulation iTop) ──
+        try:
+            access_profile = profile_service.create_profile_from_ticket(
+                db          = self.db,
+                ticket      = ticket,
+                approved_by = current_user.fullName or current_user.username,
+            )
+            # Notifier iTop (log ITSM)
+            system_name = access_profile.systeme.nom if access_profile.systeme else "Système cible"
+            self.itop_service.notify_ticket_approved(
+                ticket      = ticket,
+                profile     = access_profile,
+                system_name = system_name,
+                approved_by = current_user.fullName or current_user.username,
+            )
+        except Exception as e:
+            # Ne pas bloquer l'approbation si la création du profil échoue
+            print(f"⚠️ [PROFILE] Erreur création profil pour {ticket.ref}: {e}")
+
+        # ── 2. Mettre à jour iTop ──
         self.itop_service.update_ticket_status(ticket.ref, "approved", resolution)
-        _enrich_ticket_with_ai(ticket, self.db)
-        
-        # Log Audit
-        audit = AuditLog(
+        _enrich_ticket_with_ai(ticket)
+
+        # ── 3. Log Audit via AuditService ──
+        audit_service.log_action(
+            db=self.db,
             ticket_id=ticket.id,
             ticket_ref=ticket.ref,
-            acteur_name=current_user.fullName,
+            acteur_name=current_user.fullName or current_user.username,
             acteur_role=current_user.role.value,
-            action="Approbation Ticket",
+            action="Approbation Ticket + Création Profil",
             environnement=ticket.requested_environments[0] if ticket.requested_environments else "Inconnu",
-            resultat="Succès",
-            niveau_acces=ticket.ai_level if hasattr(ticket, 'ai_level') else "Inconnu",
-            details={"resolution": resolution, "message": "Ticket approuvé manuellement"}
+            niveau_acces=ticket.ai_level or "Inconnu",
+            details={
+                "resolution": resolution,
+                "message": "Ticket approuvé — Profil d'accès créé — Email envoyé (simulation iTop)"
+            }
         )
-        self.db.add(audit)
         self.db.commit()
-        
+
         return ticket
 
     def reject_ticket(self, ticket_id: int, reason: str, current_user: DashboardUser) -> Ticket:
@@ -134,44 +154,65 @@ class TicketService:
             raise BusinessException("Un motif de rejet est obligatoire")
         ticket = self.get_ticket_by_id(ticket_id)
         ticket = self.ticket_repo.reject_ticket(ticket_id, reason, current_user.username)
+
+        # ── 1. Notifier l'employé du rejet par email (simulation iTop) ──
+        try:
+            profile_service.notify_rejection(
+                db          = self.db,
+                ticket      = ticket,
+                reason      = reason,
+                rejected_by = current_user.fullName or current_user.username,
+            )
+            self.itop_service.notify_ticket_rejected(
+                ticket      = ticket,
+                reason      = reason,
+                rejected_by = current_user.fullName or current_user.username,
+            )
+        except Exception as e:
+            print(f"⚠️ [EMAIL] Erreur notification rejet pour {ticket.ref}: {e}")
+
+        # ── 2. Mettre à jour iTop ──
         self.itop_service.update_ticket_status(ticket.ref, "rejected", reason)
-        _enrich_ticket_with_ai(ticket, self.db)
-        
-        # Log Audit
-        audit = AuditLog(
+        _enrich_ticket_with_ai(ticket)
+
+        # ── 3. Log Audit via AuditService ──
+        audit_service.log_action(
+            db=self.db,
             ticket_id=ticket.id,
             ticket_ref=ticket.ref,
-            acteur_name=current_user.fullName,
+            acteur_name=current_user.fullName or current_user.username,
             acteur_role=current_user.role.value,
             action="Rejet Ticket",
-            environnement=ticket.requested_environments[0] if ticket.requested_environments else "Inconnu",
             resultat="Échec",
-            niveau_acces=ticket.ai_level if hasattr(ticket, 'ai_level') else "Inconnu",
-            details={"motif": reason, "message": "Ticket rejeté manuellement"}
+            environnement=ticket.requested_environments[0] if ticket.requested_environments else "Inconnu",
+            niveau_acces=ticket.ai_level or "Inconnu",
+            details={
+                "motif": reason,
+                "message": "Ticket rejeté — Email envoyé à l'employé (simulation iTop)"
+            }
         )
-        self.db.add(audit)
         self.db.commit()
-        
+
         return ticket
 
     def escalate_ticket(self, ticket_id: int, escalate_to: str, current_user: DashboardUser) -> Ticket:
         ticket = self.get_ticket_by_id(ticket_id)
         ticket = self.ticket_repo.assign_ticket(ticket_id, escalate_to)
-        _enrich_ticket_with_ai(ticket, self.db)
+        _enrich_ticket_with_ai(ticket)
         
-        # Log Audit
-        audit = AuditLog(
+        # Log Audit via AuditService
+        audit_service.log_action(
+            db=self.db,
             ticket_id=ticket.id,
             ticket_ref=ticket.ref,
-            acteur_name=current_user.fullName,
+            acteur_name=current_user.fullName or current_user.username,
             acteur_role=current_user.role.value,
             action="Escalade Ticket",
-            environnement=ticket.requested_environments[0] if ticket.requested_environments else "Inconnu",
             resultat="Alerte",
-            niveau_acces=ticket.ai_level if hasattr(ticket, 'ai_level') else "Inconnu",
+            environnement=ticket.requested_environments[0] if ticket.requested_environments else "Inconnu",
+            niveau_acces=ticket.ai_level or "Inconnu",
             details={"escaladé_vers": escalate_to, "message": "Nécessite validation supérieure"}
         )
-        self.db.add(audit)
         self.db.commit()
         
         return ticket
@@ -238,15 +279,29 @@ class TicketService:
             BANKING_RESOURCES, weights=[15, 15, 15, 15, 10, 10, 20], k=1
         )[0]
 
-        # ── Junior/Senior influence risk profile ────────────────────────────
-        # Junior → plus de chance d'avoir des accès risqués (PRD, DELETE, etc.)
-        # Senior → scénarios modérés et cohérents avec le rôle
+        # ── Profil de risque selon la séniorité ─────────────────────────────────
+        #
+        # JUNIOR : inexpérimenté → demandes hors-scope, accès PRD/DELETE fréquents,
+        #          rarement approuvé par le manager, motivations urgentes.
+        #
+        # SENIOR : maîtrise de son périmètre → accès DEV/TST cohérents, READ/WRITE
+        #          majoritaires, manager souvent consulté, raisons légitimes.
+        #
+        # ALL_ENVS  = ["DEV2", "DVR", "TST", "QL2", "CRT", "UAT", "INV", "PRD"]
+        # ALL_ACCESS= ["READ", "WRITE", "EXECUTE", "UPDATE", "DELETE", "FULL_ACCESS", "DBA_ACCESS"]
+
         if user_seniority == "junior":
-            env_weights    = [10, 10, 10, 10, 10, 10, 15, 25]   # PRD plus probable
-            access_weights = [20, 15, 10, 10, 15, 20, 10]       # DELETE/FULL_ACCESS plus probable
+            # Junior : PRD=27%, INV=20%, les accès dangereux sont communs
+            env_weights    = [5, 5, 8, 8, 12, 15, 20, 27]
+            access_weights = [10, 12, 8, 10, 20, 22, 18]
+            approval_weights = [15, 25, 60]   # rarement approuvé
+            reason_weights = [20, 15, 5, 25, 25, 10]  # beaucoup d'incidents/urgences
         else:
-            env_weights    = [25, 20, 15, 15, 10, 10, 3, 2]     # DEV2/DVR favorisés
-            access_weights = [35, 25, 15, 15, 5, 3, 2]          # READ/WRITE favorisés
+            # Senior : PRD quasi-impossible (0%), READ/WRITE dominent, plan approuvé
+            env_weights    = [32, 24, 18, 14, 7, 4, 1, 0]
+            access_weights = [42, 28, 14, 12, 2, 1, 1]
+            approval_weights = [55, 25, 20]   # souvent approuvé
+            reason_weights = [5, 30, 8, 12, 38, 7]  # maintenance et déploiement
 
         random_envs   = [random.choices(ALL_ENVS, weights=env_weights, k=1)[0]]
         if random.random() < 0.3:
@@ -260,14 +315,23 @@ class TicketService:
             if second != random_access[0]:
                 random_access.append(second)
 
-        request_reason  = random.choice(BANKING_REASONS)
-        approval_status = random.choices(["approved", "pending", "none"], weights=[30, 20, 50], k=1)[0]
-        # criticite dérivée pour un fallback cohérent
-        if application in ["T24", "MUREX", "SWIFT"] or random_envs[0] == "PRD":
-            criticite = random.choices(["SENSITIVE", "CRITIQUE"], weights=[50, 50], k=1)[0]
-        else:
-            criticite = random.choices(["BASE", "SENSITIVE"], weights=[60, 40], k=1)[0]
+        request_reason  = random.choices(BANKING_REASONS, weights=reason_weights, k=1)[0]
+        approval_status = random.choices(["approved", "pending", "none"], weights=approval_weights, k=1)[0]
 
+        # criticite dérivée — junior en PRD avec accès dangereux = toujours critique
+        env_principal = random_envs[0]
+        acc_principal = random_access[0]
+        if user_seniority == "junior" and env_principal == "PRD" and acc_principal in ["DELETE", "FULL_ACCESS", "DBA_ACCESS"]:
+            criticite = "CRITIQUE"
+        elif application in ["T24", "MUREX", "SWIFT"] or env_principal == "PRD":
+            criticite = random.choices(["SENSITIVE", "CRITIQUE"], weights=[50, 50], k=1)[0]
+        elif user_seniority == "senior":
+            criticite = random.choices(["BASE", "SENSITIVE"], weights=[80, 20], k=1)[0]
+        else:
+            criticite = random.choices(["BASE", "SENSITIVE"], weights=[55, 45], k=1)[0]
+
+        # Description naturelle selon le profil
+        seniority_label = "Junior" if user_seniority == "junior" else "Senior"
         new_ticket = self.ticket_repo.create({
             "ref": f"SIM-{datetime.now().strftime('%Y%m%d%H%M%S')}-{random.randint(100, 999)}",
             "status": TicketStatus.NEW,
@@ -277,8 +341,9 @@ class TicketService:
             "team_name": random_team,
             "role": random_role,
             "description": (
-                f"Demande d'accès [{', '.join(random_access)}] sur [{application}] "
-                f"/ env [{', '.join(random_envs)}]"
+                f"[{seniority_label}] {random_name} ({random_team}/{random_role}) "
+                f"demande un acces [{', '.join(random_access)}] sur [{application}] "
+                f"en environnement [{', '.join(random_envs)}] — Motif: {request_reason}"
             ),
             "requested_environments": random_envs,
             "requested_access_details": {
@@ -289,7 +354,7 @@ class TicketService:
                 "user_seniority":           user_seniority,
                 "request_reason":           request_reason,
                 "manager_approval_status":  approval_status,
-                "justification":            "Simulation bancaire réaliste",
+                "justification":            f"Simulation bancaire — profil {seniority_label}",
             },
         })
 
@@ -297,21 +362,22 @@ class TicketService:
         ai_result = ai_service.classify_and_save(self.db, new_ticket)
 
         return {
-            "message": "Ticket simulé créé avec succès",
+            "message": "Ticket simule cree avec succes",
             "ticket": {
                 "id":            new_ticket.id,
                 "ref":           new_ticket.ref,
                 "employee_name": new_ticket.employee_name,
                 "team":          new_ticket.team_name,
                 "role":          new_ticket.role,
+                "seniority":     user_seniority,
                 "application":   application,
                 "environments":  new_ticket.requested_environments,
                 "access":        new_ticket.requested_access_details,
                 "ai_classification": {
-                    "level":       ai_result["classification"]["level"],
-                    "confidence":  ai_result["classification"]["confidence"],
-                    "probabilities": ai_result["classification"]["probabilities"],
-                    "assigned_to": new_ticket.assigned_to,
+                    "level":         ai_result["classification"]["level"],
+                    "confidence":    ai_result["classification"]["confidence"],
+                    "probabilities": ai_result["classification"].get("probabilities", {}),
+                    "assigned_to":   new_ticket.assigned_to,
                 },
             },
         }
