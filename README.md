@@ -1,7 +1,7 @@
 # Système de Gestion Intelligente des Habilitations IT
 
-[![🔬 Backend CI](https://github.com/mehdbenguiza/ProjetPFE/actions/workflows/backend-ci.yml/badge.svg)](https://github.com/mehdbenguiza/ProjetPFE/actions/workflows/backend-ci.yml)
-[![🎨 Frontend CI](https://github.com/mehdbenguiza/ProjetPFE/actions/workflows/frontend-ci.yml/badge.svg)](https://github.com/mehdbenguiza/ProjetPFE/actions/workflows/frontend-ci.yml)
+[![🔬 Backend CI](https://github.com/mehdbenguiza/GestionHabilitationIntelligente-DeuxMod-lesAI-MotourDeDecision-/actions/workflows/backend-ci.yml/badge.svg)](https://github.com/mehdbenguiza/GestionHabilitationIntelligente-DeuxMod-lesAI-MotourDeDecision-/actions/workflows/backend-ci.yml)
+[![🎨 Frontend CI](https://github.com/mehdbenguiza/GestionHabilitationIntelligente-DeuxMod-lesAI-MotourDeDecision-/actions/workflows/frontend-ci.yml/badge.svg)](https://github.com/mehdbenguiza/GestionHabilitationIntelligente-DeuxMod-lesAI-MotourDeDecision-/actions/workflows/frontend-ci.yml)
 
 > **Projet de Fin d'Études — BIAT 2026**  
 > Système intelligent de gestion des habilitations d'accès aux systèmes d'information,
