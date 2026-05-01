@@ -1,5 +1,64 @@
-node_modules/
+# ════════════════════════════════════════════════════════════════════════════
+#  .gitignore — Projet PFE Gestion des Habilitations
+# ════════════════════════════════════════════════════════════════════════════
+
+# ── Python ───────────────────────────────────────────────────────────────
 __pycache__/
-*.pyc
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+*.egg
+.Python
+
+# ── Environnements virtuels ───────────────────────────────────────────────
+venv/
+.venv/
+env/
+ENV/
+
+# ── Secrets (JAMAIS committer les vraies clés !) ─────────────────────────
 .env
+*.env
+.env.local
+.env.production
+
+# ── Bases de données ──────────────────────────────────────────────────────
 *.db
+*.sqlite
+*.sqlite3
+
+# ── Node.js ───────────────────────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ── Build frontend ────────────────────────────────────────────────────────
+FrontendPFE/dist/
+
+# ── Coverage & Tests ──────────────────────────────────────────────────────
+.coverage
+coverage.xml
+htmlcov/
+.pytest_cache/
+
+# ── Logs ─────────────────────────────────────────────────────────────────
+*.log
+
+# ── OS ────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── IDE ───────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ── Docker ────────────────────────────────────────────────────────────────
+# (Les fichiers docker-compose et Dockerfile SONT commités)
+# Les données des volumes sont locales
+Backend/data/
+Backend/uploads/

@@ -1,0 +1,49 @@
+# ── Environnement virtuel (réinstallé via requirements.txt) ──────────────
+venv/
+.venv/
+env/
+
+# ── Cache Python ──────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.Python
+
+# ── Secrets (JAMAIS dans une image Docker) ───────────────────────────────
+.env
+*.env
+
+# ── Bases de données locales (remplacées par volumes Docker) ─────────────
+*.db
+*.sqlite
+*.sqlite3
+
+# ── Tests (inutiles en production) ───────────────────────────────────────
+tests/
+.pytest_cache/
+pytest.ini
+.coverage
+coverage.xml
+htmlcov/
+
+# ── Fichiers de développement ─────────────────────────────────────────────
+scratch/
+*.log
+reports/
+alter_db.py
+patch_roles.py
+run_alter.py
+
+# ── Node (ne devrait pas être là mais par sécurité) ───────────────────────
+node_modules/
+
+# ── Git ───────────────────────────────────────────────────────────────────
+.git/
+.gitignore
+
+# ── Documentation et IDE ─────────────────────────────────────────────────
+*.md
+.vscode/
+.idea/

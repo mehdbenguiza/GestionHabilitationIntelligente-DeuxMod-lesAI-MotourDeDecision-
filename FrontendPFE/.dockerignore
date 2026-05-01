@@ -1,0 +1,25 @@
+# ── Dépendances (réinstallées dans le conteneur via npm ci) ──────────────
+node_modules/
+
+# ── Build précédent (régénéré dans le conteneur) ─────────────────────────
+dist/
+
+# ── Secrets et config locale ──────────────────────────────────────────────
+.env
+.env.local
+.env.development
+.env.production
+
+# ── Logs ─────────────────────────────────────────────────────────────────
+*.log
+npm-debug.log*
+
+# ── Git ───────────────────────────────────────────────────────────────────
+.git/
+.gitignore
+
+# ── Documentation et IDE ─────────────────────────────────────────────────
+*.md
+.vscode/
+.idea/
+guidelines/

@@ -1,0 +1,212 @@
+# ════════════════════════════════════════════════════════════════════════════
+#  backend-ci.yml — Pipeline CI Backend
+#  Projet PFE : Gestion Intelligente des Habilitations IT — BIAT 2026
+#
+#  Déclencheur : git push sur main/develop (fichiers Backend/**)
+#
+#  Étapes :
+#    1. lint        → Analyse qualité code Python (flake8)
+#    2. tests       → Tests Pytest avec rapport de couverture
+#    3. docker-build → Construction + validation image Docker backend
+# ════════════════════════════════════════════════════════════════════════════
+
+name: 🔬 Backend CI — Tests & Docker
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'Backend/**'
+      - '.github/workflows/backend-ci.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'Backend/**'
+
+# Annule les pipelines en cours si un nouveau push arrive
+concurrency:
+  group: backend-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  # ══════════════════════════════════════════════════════════════════════════
+  #  JOB 1 : Lint — Qualité du code Python
+  # ══════════════════════════════════════════════════════════════════════════
+  lint:
+    name: 🧹 Lint Python (flake8)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout du code
+        uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 📦 Installer flake8
+        run: pip install flake8 flake8-bugbear
+
+      - name: 🔍 Analyser Backend/app/
+        run: |
+          flake8 Backend/app/ \
+            --max-line-length=120 \
+            --extend-ignore=E203,W503 \
+            --exclude=__pycache__,migrations \
+            --format='%(path)s:%(row)d:%(col)d: %(code)s %(text)s' \
+            --count \
+            --statistics
+        continue-on-error: true   # Lint ne bloque pas la pipeline pour le PFE
+
+  # ══════════════════════════════════════════════════════════════════════════
+  #  JOB 2 : Tests — Pytest avec couverture de code
+  # ══════════════════════════════════════════════════════════════════════════
+  tests:
+    name: 🧪 Tests Pytest + Couverture
+    runs-on: ubuntu-latest
+    needs: lint
+
+    steps:
+      - name: 📥 Checkout du code
+        uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: Backend/requirements.txt
+
+      - name: 📦 Installer les dépendances
+        working-directory: Backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest-cov
+
+      # Crée un .env temporaire avec des valeurs fictives (jamais les vraies !)
+      - name: 🔐 Créer le .env de test (CI uniquement)
+        working-directory: Backend/app
+        run: |
+          cat > .env << 'EOF'
+          DATABASE_URL=sqlite:///./test_unit.db
+          SECRET_KEY=ci-test-only-secret-key-not-real-and-long-enough-32chars
+          ALGORITHM=HS256
+          ACCESS_TOKEN_EXPIRE_MINUTES=60
+          SMTP_SERVER=localhost
+          SMTP_PORT=587
+          SMTP_USERNAME=test@ci.local
+          SMTP_PASSWORD=fake_password_ci_only
+          EMAIL_FROM=noreply@ci.local
+          ENVIRONMENT=test
+          ITOP_API_URL=
+          ITOP_USERNAME=
+          ITOP_PASSWORD=
+          EOF
+
+      - name: 🧪 Lancer les tests avec couverture
+        working-directory: Backend
+        run: |
+          pytest tests/ \
+            --verbose \
+            --tb=short \
+            --cov=app \
+            --cov-report=term-missing \
+            --cov-report=xml:coverage.xml \
+            --cov-report=html:htmlcov \
+            -p no:warnings
+
+      - name: 📊 Afficher le résumé de couverture
+        working-directory: Backend
+        run: |
+          echo "## 📊 Couverture de code" >> $GITHUB_STEP_SUMMARY
+          python -c "
+          import xml.etree.ElementTree as ET
+          tree = ET.parse('coverage.xml')
+          root = tree.getroot()
+          rate = float(root.attrib.get('line-rate', 0)) * 100
+          print(f'Couverture globale : {rate:.1f}%')
+          print(f'### Résultat : {\"✅ Bon\" if rate >= 60 else \"⚠️ À améliorer\"}')
+          " >> $GITHUB_STEP_SUMMARY
+
+      - name: 💾 Sauvegarder le rapport de couverture
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report-${{ github.sha }}
+          path: |
+            Backend/coverage.xml
+            Backend/htmlcov/
+          retention-days: 30
+
+  # ══════════════════════════════════════════════════════════════════════════
+  #  JOB 3 : Docker Build — Validation image backend
+  # ══════════════════════════════════════════════════════════════════════════
+  docker-build-backend:
+    name: 🐳 Docker Build & Healthcheck
+    runs-on: ubuntu-latest
+    needs: tests
+
+    steps:
+      - name: 📥 Checkout du code
+        uses: actions/checkout@v4
+
+      - name: 🐳 Construire l'image Docker backend
+        run: |
+          docker build \
+            --tag pfe-backend:${{ github.sha }} \
+            --tag pfe-backend:latest \
+            --label "git-commit=${{ github.sha }}" \
+            --label "build-date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            ./Backend
+
+      - name: 🏥 Vérifier que le conteneur démarre et répond
+        run: |
+          # Lancer le conteneur avec un .env minimal
+          docker run -d \
+            --name test_backend \
+            -p 8000:8000 \
+            -e DATABASE_URL=sqlite:///./data/test.db \
+            -e SECRET_KEY=test-healthcheck-key-not-real \
+            -e ALGORITHM=HS256 \
+            -e ENVIRONMENT=test \
+            -e SMTP_SERVER=localhost \
+            -e SMTP_PORT=587 \
+            -e SMTP_USERNAME=ci@test.local \
+            -e SMTP_PASSWORD=fake \
+            -e EMAIL_FROM=noreply@test.local \
+            pfe-backend:latest
+
+          # Attendre que le backend soit prêt (max 60 secondes)
+          echo "⏳ Attente du démarrage du backend..."
+          for i in $(seq 1 12); do
+            if curl -sf http://localhost:8000/health; then
+              echo "✅ Backend opérationnel !"
+              break
+            fi
+            echo "Tentative $i/12 — attente 5s..."
+            sleep 5
+          done
+
+          # Vérification finale
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/health)
+          if [ "$STATUS" = "200" ]; then
+            echo "✅ Healthcheck OK (HTTP $STATUS)"
+          else
+            echo "❌ Healthcheck échoué (HTTP $STATUS)"
+            docker logs test_backend
+            exit 1
+          fi
+
+          # Nettoyage
+          docker stop test_backend
+          docker rm test_backend
+
+      - name: 📋 Afficher les informations de l'image
+        run: |
+          echo "## 🐳 Image Docker Backend" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tag**: pfe-backend:${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          docker image inspect pfe-backend:latest \
+            --format='- **Taille**: {{.Size}} bytes' >> $GITHUB_STEP_SUMMARY
