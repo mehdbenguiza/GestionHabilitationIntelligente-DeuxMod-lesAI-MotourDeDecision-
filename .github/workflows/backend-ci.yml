@@ -109,7 +109,7 @@ jobs:
       - name: 🧪 Lancer les tests avec couverture
         working-directory: Backend
         run: |
-          pytest tests/ \
+          python -m pytest tests/ \
             --verbose \
             --tb=short \
             --cov=app \
