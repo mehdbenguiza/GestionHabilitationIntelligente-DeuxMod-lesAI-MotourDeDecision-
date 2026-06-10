@@ -237,7 +237,7 @@ class TicketService:
 
     def simulate_create_ticket(self) -> Dict[str, Any]:
         """Crée un ticket simulé pour le développement avec classification IA"""
-        if settings.ENVIRONMENT != "development":
+        if settings.ENVIRONMENT not in ["development", "test"]:
             raise BusinessException("Disponible uniquement en mode développement", 403)
 
         # ── Données de référence bancaires (identiques au dataset d'entraînement) ──
@@ -427,7 +427,7 @@ class TicketService:
 
     def simulate_batch_tickets(self, count: int) -> Dict[str, Any]:
         """Crée plusieurs tickets simulés"""
-        if settings.ENVIRONMENT != "development":
+        if settings.ENVIRONMENT not in ["development", "test"]:
             raise BusinessException("Disponible uniquement en mode développement", 403)
 
         created = []
