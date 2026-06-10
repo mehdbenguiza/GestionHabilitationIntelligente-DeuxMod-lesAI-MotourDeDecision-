@@ -33,3 +33,9 @@ class ClassificationResult(Base):
     recommended_action      = Column(String(50), nullable=True) # AUTO_APPROVE / MANUAL_REVIEW / BLOCK
     confidence_level_label  = Column(String(50), nullable=True) # Fiable, Risqué, etc.
     # "model" | "human_correction" | "fallback" | "error"
+
+    # ── V3.0 : XAI (SHAP) + NLP ──────────────────────────────────────────────
+    shap_values   = Column(JSON,    nullable=True)  # {feature: shap_value} — vraie XAI
+    nlp_score     = Column(Integer, nullable=True)  # 0-100 : qualité justification
+    nlp_label     = Column(String(30), nullable=True)  # LEGIT/VAGUE/SUSPICIOUS/URGENT_SANS_MOTIF
+    trust_modifier= Column(Integer, nullable=True)  # modificateur appliqué depuis trust_score

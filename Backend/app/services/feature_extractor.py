@@ -22,7 +22,7 @@ class FeatureExtractor:
         Entraîne les encodeurs sur le dataset
         df: DataFrame contenant les données d'entraînement
         """
-        print("🔧 Entraînement des encodeurs...")
+        print(" Entranement des encodeurs...")
         
         # 1. Encodage des variables catégorielles
         categorical_cols = ['team', 'role', 'application', 'environment', 'access_type', 'resource', 'user_seniority', 'request_reason', 'manager_approval_status']
@@ -126,7 +126,7 @@ class FeatureExtractor:
             'feature_columns': self.feature_columns,
             'is_fitted': self.is_fitted
         }, path)
-        print(f"✅ FeatureExtractor sauvegardé : {path}")
+        print(f"[OK] FeatureExtractor sauvegard : {path}")
     
     def load(self, path="models/feature_extractor.pkl"):
         """Charge l'extracteur"""
@@ -134,4 +134,4 @@ class FeatureExtractor:
         self.label_encoders = data['label_encoders']
         self.feature_columns = data['feature_columns']
         self.is_fitted = data['is_fitted']
-        print(f"✅ FeatureExtractor chargé : {path}")
+        print(f"[OK] FeatureExtractor charg : {path}")

@@ -1,7 +1,7 @@
 # app/services/audit_service.py
 
 from sqlalchemy.orm import Session
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Any, Dict
 from app.models.audit_log import AuditLog
 from app.models.login_history import LoginHistory
@@ -54,7 +54,7 @@ class AuditService:
             action=action,
             ip_address=ip_address,
             details=details,
-            timestamp=datetime.utcnow()
+            timestamp=datetime.now(timezone.utc)
         )
         db.add(history)
         return history
@@ -73,7 +73,7 @@ class AuditService:
             message=message,
             type=type,
             target_roles=target_roles,
-            created_at=datetime.utcnow()
+            created_at=datetime.now(timezone.utc)
         )
         db.add(notif)
         return notif

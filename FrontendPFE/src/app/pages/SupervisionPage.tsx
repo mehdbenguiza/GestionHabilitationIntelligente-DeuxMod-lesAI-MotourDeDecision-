@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   Brain, TrendingUp, AlertCircle, Target, BarChart3, 
   Activity, Settings, Edit, Trash2, CheckCircle, XCircle,
   Plus, Save, X, Download, RefreshCw, 
-  ChevronDown, ChevronUp, Filter, Clock, Info
+  ChevronDown, ChevronUp, Filter, Clock, Info, Eye
 } from 'lucide-react';
 import { mockDecisionsIA } from '../utils/mockData';
 import { Badge } from '../components/ui/badge';
@@ -67,8 +68,68 @@ const mockAutomationRules: AutomationRule[] = [
   }
 ];
 
+const formatAnomalyFlag = (flag: string): string => {
+  if (!flag.startsWith('ANOMALY_')) return flag;
+  const parts = flag.split(':');
+  const key = parts[0];
+  const detail = parts.slice(1).join(':');
+  switch (key) {
+    case 'ANOMALY_WEEKEND_SUBMISSION':
+      return `Soumission le week-end (${detail || ''})`;
+    case 'ANOMALY_OUT_OF_HOURS':
+      return `Heures non-ouvrées (${detail || ''})`;
+    case 'ANOMALY_HIGH_VOLUME_LOW':
+      return `Volume inhabituel (${detail ? detail.replace(/_/g, ' ') : ''})`;
+    case 'ANOMALY_HIGH_VOLUME_MEDIUM':
+      return `Volume suspect (${detail ? detail.replace(/_/g, ' ') : ''})`;
+    case 'ANOMALY_HIGH_VOLUME_HIGH':
+      return `Volume critique (${detail ? detail.replace(/_/g, ' ') : ''})`;
+    case 'ANOMALY_ML_PATTERN':
+      return `Pattern IA inhabituel (${detail || ''})`;
+    default:
+      return key.replace('ANOMALY_', '').replace(/_/g, ' ');
+  }
+};
+
+const detailedAnomalies = [
+  {
+    id: '1',
+    ticketId: '4',
+    ticket: 'TKT-2026-004',
+    demandeur: 'Nesrine Bouazizi',
+    equipe: 'Support Client',
+    demande: 'Accès base Core Banking en PROD',
+    reasoning: [
+      'Rôle "Agent Support" incompatible avec accès niveau Critique',
+      'Équipe Support ne nécessite pas d\'accès direct aux bases de données',
+      'Pas d\'historique de demandes similaires pour cette équipe',
+      'Score de risque: 88/100 (Très élevé)'
+    ],
+    timestamp: new Date('2026-02-24T16:30:00'),
+    severity: 'high'
+  },
+  {
+    id: '2',
+    ticketId: '2',
+    ticket: 'TKT-2026-007',
+    demandeur: 'Ali Hammouda',
+    equipe: 'Marketing',
+    demande: 'Accès serveurs PROD',
+    reasoning: [
+      'Équipe Marketing n\'a jamais eu d\'accès aux serveurs de production',
+      'Aucune justification métier fournie',
+      'Demande en dehors des heures de travail (23h45)',
+      'Score de risque: 92/100 (Critique)'
+    ],
+    timestamp: new Date('2026-02-26T23:45:00'),
+    severity: 'critical'
+  }
+];
+
 export function SupervisionPage() {
+  const navigate = useNavigate();
   // États
+  const [resolvedAnomalyIds, setResolvedAnomalyIds] = useState<string[]>([]);
   const [filterAnomalie, setFilterAnomalie] = useState('all');
   const [showRulesModal, setShowRulesModal] = useState(false);
   const [showAddRuleModal, setShowAddRuleModal] = useState(false);
@@ -87,35 +148,78 @@ export function SupervisionPage() {
   // Nouveaux états de données réelles
   const [realMetrics, setRealMetrics] = useState<any>(null);
   const [realDecisions, setRealDecisions] = useState<any[]>([]);
+  const [realAnomalies, setRealAnomalies] = useState<any[]>([]);
   const [loadingSupervision, setLoadingSupervision] = useState(true);
+  const [loadingRules, setLoadingRules] = useState(true);
+
+  const activeAnomalies = (realAnomalies.length > 0 ? realAnomalies : detailedAnomalies)
+    .filter(anomaly => !resolvedAnomalyIds.includes(anomaly.id));
 
   useEffect(() => {
+    fetchData();
+    fetchRules();
+    fetchAnomalies();
+  }, []);
+
+  const fetchData = async () => {
     const token = localStorage.getItem('token');
     if (!token) return;
-
-    const fetchData = async () => {
-      try {
-        const metricsRes = await fetch('http://127.0.0.1:8000/ai/metrics?v=2', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        const decisionsRes = await fetch('http://127.0.0.1:8000/ai/decisions?v=2', {
-             headers: { 'Authorization': `Bearer ${token}` }
-        });
-        
-        if (metricsRes.ok && decisionsRes.ok) {
-           const metrics = await metricsRes.json();
-           const decisions = await decisionsRes.json();
-           setRealMetrics(metrics);
-           setRealDecisions(decisions);
-        }
-      } catch (err) {
-        console.error("Supervision endpoints error:", err);
-      } finally {
-        setLoadingSupervision(false);
+    setLoadingSupervision(true);
+    try {
+      const metricsRes = await fetch('http://127.0.0.1:8000/ai/metrics?v=2', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const decisionsRes = await fetch('http://127.0.0.1:8000/ai/decisions?v=2', {
+           headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      if (metricsRes.ok && decisionsRes.ok) {
+         const metrics = await metricsRes.json();
+         const decisions = await decisionsRes.json();
+         setRealMetrics(metrics);
+         setRealDecisions(decisions);
       }
-    };
-    fetchData();
-  }, []);
+    } catch (err) {
+      console.error("Supervision endpoints error:", err);
+    } finally {
+      setLoadingSupervision(false);
+    }
+  };
+
+  const fetchRules = async () => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    setLoadingRules(true);
+    try {
+      const res = await fetch('http://127.0.0.1:8000/automation-rules', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setRules(data);
+      }
+    } catch (err) {
+      console.error("Fetch rules error:", err);
+    } finally {
+      setLoadingRules(false);
+    }
+  };
+
+  const fetchAnomalies = async () => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    try {
+      const res = await fetch('http://127.0.0.1:8000/ai/anomalies', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setRealAnomalies(data);
+      }
+    } catch (err) {
+      console.error("Fetch anomalies error:", err);
+    }
+  };
 
   // Fonction pour ajouter une notification
   const addNotification = (type: Notification['type'], message: string) => {
@@ -133,10 +237,25 @@ export function SupervisionPage() {
   };
 
   // Fonctions CRUD pour les règles
-  const handleAddRule = (rule: AutomationRule) => {
-    setRules(prev => [...prev, { ...rule, id: Date.now().toString() }]);
-    setShowAddRuleModal(false);
-    addNotification('success', 'Règle ajoutée avec succès');
+  const handleAddRule = async (rule: AutomationRule) => {
+    const token = localStorage.getItem('token');
+    try {
+      const res = await fetch('http://127.0.0.1:8000/automation-rules', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(rule)
+      });
+      if (res.ok) {
+        fetchRules();
+        setShowAddRuleModal(false);
+        addNotification('success', 'Règle ajoutée avec succès');
+      }
+    } catch (err) {
+      addNotification('error', 'Erreur lors de l\'ajout');
+    }
   };
 
   const handleEditRule = (rule: AutomationRule) => {
@@ -144,26 +263,88 @@ export function SupervisionPage() {
     setShowAddRuleModal(true);
   };
 
-  const handleUpdateRule = (updatedRule: AutomationRule) => {
-    setRules(prev => prev.map(r => r.id === updatedRule.id ? updatedRule : r));
-    setEditingRule(null);
-    setShowAddRuleModal(false);
-    addNotification('success', 'Règle modifiée avec succès');
-  };
-
-  const handleDeleteRule = (ruleId: string) => {
-    if (window.confirm('Êtes-vous sûr de vouloir supprimer cette règle ?')) {
-      setRules(prev => prev.filter(r => r.id !== ruleId));
-      addNotification('error', 'Règle supprimée');
+  const handleUpdateRule = async (updatedRule: AutomationRule) => {
+    const token = localStorage.getItem('token');
+    try {
+      const res = await fetch(`http://127.0.0.1:8000/automation-rules/${updatedRule.id}`, {
+        method: 'PUT',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(updatedRule)
+      });
+      if (res.ok) {
+        fetchRules();
+        setEditingRule(null);
+        setShowAddRuleModal(false);
+        addNotification('success', 'Règle modifiée avec succès');
+      }
+    } catch (err) {
+      addNotification('error', 'Erreur lors de la modification');
     }
   };
 
-  const handleValidateAnomaly = (anomalyId: string) => {
-    addNotification('success', `Anomalie ${anomalyId} validée et traitée`);
+  const handleDeleteRule = async (ruleId: string) => {
+    if (window.confirm('Êtes-vous sûr de vouloir supprimer cette règle ?')) {
+      const token = localStorage.getItem('token');
+      try {
+        const res = await fetch(`http://127.0.0.1:8000/automation-rules/${ruleId}`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          fetchRules();
+          addNotification('error', 'Règle supprimée');
+        }
+      } catch (err) {
+        addNotification('error', 'Erreur lors de la suppression');
+      }
+    }
   };
 
-  const handleIgnoreAnomaly = (anomalyId: string) => {
-    addNotification('info', `Anomalie ${anomalyId} ignorée`);
+  const handleValidateAnomaly = async (id: string) => {
+    const token = localStorage.getItem('token');
+    let success = false;
+    try {
+      const res = await fetch(`http://127.0.0.1:8000/ai/anomalies/${id}/resolve?action=VALIDATED`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        success = true;
+        fetchAnomalies();
+        addNotification('success', 'Anomalie validée comme critique. Le ticket a été rejeté.');
+      }
+    } catch (err) {
+      console.error("API error, resolving anomaly locally", err);
+    }
+    if (!success) {
+      setResolvedAnomalyIds(prev => [...prev, id]);
+      addNotification('success', 'Anomalie validée comme critique (Simulation locale).');
+    }
+  };
+
+  const handleIgnoreAnomaly = async (id: string) => {
+    const token = localStorage.getItem('token');
+    let success = false;
+    try {
+      const res = await fetch(`http://127.0.0.1:8000/ai/anomalies/${id}/resolve?action=IGNORED`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        success = true;
+        fetchAnomalies();
+        addNotification('info', 'Alerte ignorée.');
+      }
+    } catch (err) {
+      console.error("API error, ignoring anomaly locally", err);
+    }
+    if (!success) {
+      setResolvedAnomalyIds(prev => [...prev, id]);
+      addNotification('info', 'Alerte ignorée (Simulation locale).');
+    }
   };
 
   const toggleAnomalyExpansion = (anomalyId: string) => {
@@ -224,39 +405,6 @@ export function SupervisionPage() {
   ];
 
   const anomaliesRecentes = mockDecisionsIA.filter(d => d.anomalie);
-
-  const detailedAnomalies = [
-    {
-      id: '1',
-      ticket: 'TKT-2026-004',
-      demandeur: 'Nesrine Bouazizi',
-      equipe: 'Support Client',
-      demande: 'Accès base Core Banking en PROD',
-      reasoning: [
-        'Rôle "Agent Support" incompatible avec accès niveau Critique',
-        'Équipe Support ne nécessite pas d\'accès direct aux bases de données',
-        'Pas d\'historique de demandes similaires pour cette équipe',
-        'Score de risque: 88/100 (Très élevé)'
-      ],
-      timestamp: new Date('2026-02-24T16:30:00'),
-      severity: 'high'
-    },
-    {
-      id: '2',
-      ticket: 'TKT-2026-007',
-      demandeur: 'Ali Hammouda',
-      equipe: 'Marketing',
-      demande: 'Accès serveurs PROD',
-      reasoning: [
-        'Équipe Marketing n\'a jamais eu d\'accès aux serveurs de production',
-        'Aucune justification métier fournie',
-        'Demande en dehors des heures de travail (23h45)',
-        'Score de risque: 92/100 (Critique)'
-      ],
-      timestamp: new Date('2026-02-26T23:45:00'),
-      severity: 'critical'
-    }
-  ];
 
   const pieData = realMetrics ? [
     { name: 'Base', value: realMetrics.levels['BASE'] || 0, color: '#10B981' },
@@ -592,106 +740,118 @@ export function SupervisionPage() {
         </div>
       </div>
 
-      {/* Anomalies détaillées */}
-      <div className="bg-white rounded-xl border border-[#E2E8F0] shadow-sm overflow-hidden">
-        <div className="px-6 py-4 bg-[#F8FAFC] border-b border-[#E2E8F0]">
-          <div className="flex items-center gap-2">
-            <AlertCircle className="text-[#EF4444]" size={20} />
-            <h2 className="font-semibold text-[#1E2937]">Anomalies Détectées - Demandes Inhabituelles</h2>
+      {/* Anomalies détectées - Nouveau design professionnel */}
+      <div className="bg-white rounded-2xl border border-[#E2E8F0] shadow-sm overflow-hidden">
+        <div className="px-8 py-6 bg-[#F8FAFC] border-b border-[#E2E8F0] flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-red-100 rounded-lg">
+              <AlertCircle className="text-[#EF4444]" size={24} />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-[#1E2937]">Anomalies Comportementales</h2>
+              <p className="text-sm text-[#64748B]">Dernières détections suspectes (Isolation Forest + Règles)</p>
+            </div>
           </div>
+          <Badge className="bg-red-50 text-red-700 border-red-200 border-2 font-bold px-4 py-1.5 rounded-xl">
+            {activeAnomalies.length} Alertes Actives
+          </Badge>
         </div>
 
-        <div className="p-6 space-y-4">
-          {detailedAnomalies.map((anomaly) => (
-            <div 
-              key={anomaly.id} 
-              className={`p-6 rounded-xl border-2 transition-all ${
-                anomaly.severity === 'critical' 
-                  ? 'bg-red-50 border-red-300 hover:border-red-400' 
-                  : 'bg-orange-50 border-orange-300 hover:border-orange-400'
-              }`}
-            >
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-3">
+        {/* Actions Guide Banner */}
+        <div className="bg-blue-50/50 px-8 py-3 border-b border-[#E2E8F0] flex items-center gap-2 text-xs text-[#003087]">
+          <Info size={14} className="flex-shrink-0" />
+          <span>
+            <strong>Guide de traitement :</strong> 
+            <span className="mx-1">
+              <span className="font-semibold text-green-700">Valider</span> (confirme l'anomalie et rejette automatiquement le ticket pour des raisons de sécurité)
+            </span>
+            | 
+            <span className="mx-1">
+              <span className="font-semibold text-gray-600">Ignorer</span> (classe l'alerte sans rejeter le ticket, permettant son traitement normal)
+            </span>
+          </span>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="bg-[#F8FAFC]/50 border-b border-[#E2E8F0]">
+                <th className="px-8 py-4 text-left text-[10px] font-bold text-[#94A3B8] uppercase tracking-[0.2em]">Référence Ticket</th>
+                <th className="px-8 py-4 text-left text-[10px] font-bold text-[#94A3B8] uppercase tracking-[0.2em]">Collaborateur</th>
+                <th className="px-8 py-4 text-left text-[10px] font-bold text-[#94A3B8] uppercase tracking-[0.2em]">Type d'Anomalie / Raisonnement</th>
+                <th className="px-8 py-4 text-left text-[10px] font-bold text-[#94A3B8] uppercase tracking-[0.2em]">Sévérité</th>
+                <th className="px-8 py-4 text-left text-[10px] font-bold text-[#94A3B8] uppercase tracking-[0.2em]">Date & Heure</th>
+                <th className="px-8 py-4 text-left text-[10px] font-bold text-[#94A3B8] uppercase tracking-[0.2em]">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#E2E8F0]">
+              {activeAnomalies.map((anomaly) => (
+                <tr key={anomaly.id} className="hover:bg-[#F8FAFC]/80 transition-colors group">
+                  <td className="px-8 py-5">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-[#EF4444] animate-pulse" />
+                      <span className="font-bold text-[#003087]">{anomaly.ticket}</span>
+                    </div>
+                  </td>
+                  <td className="px-8 py-5">
+                    <div className="flex flex-col">
+                      <span className="font-bold text-[#1E2937]">{anomaly.demandeur}</span>
+                      <span className="text-xs text-[#64748B]">{anomaly.equipe}</span>
+                    </div>
+                  </td>
+                  <td className="px-8 py-5 max-w-md">
+                    <div className="flex flex-wrap gap-1.5">
+                      {anomaly.reasoning.map((reason: string, idx: number) => (
+                        <span key={idx} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-red-50 text-red-700 text-[11px] font-semibold border border-red-100">
+                          {formatAnomalyFlag(reason)}
+                        </span>
+                      ))}
+                    </div>
+                  </td>
+                  <td className="px-8 py-5">
                     <Badge className={`${
                       anomaly.severity === 'critical' 
-                        ? 'bg-red-200 text-red-800 border-red-400' 
-                        : 'bg-orange-200 text-orange-800 border-orange-400'
-                    } border font-bold px-3 py-1`}>
-                      {anomaly.ticket}
+                        ? 'bg-red-600 text-white shadow-sm shadow-red-200' 
+                        : 'bg-orange-500 text-white shadow-sm shadow-orange-200'
+                    } font-black px-3 py-1 rounded-lg text-[10px] uppercase tracking-tighter`}>
+                      {anomaly.severity === 'critical' ? 'CRITIQUE' : 'ÉLEVÉE'}
                     </Badge>
-                    <span className="font-semibold text-[#1E2937]">{anomaly.demandeur}</span>
-                    <span className="text-sm text-[#64748B]">• {anomaly.equipe}</span>
-                    <Badge className={anomaly.severity === 'critical' ? 'bg-red-100 text-red-800' : 'bg-orange-100 text-orange-800'}>
-                      {anomaly.severity === 'critical' ? 'Critique' : 'Élevée'}
-                    </Badge>
-                  </div>
-                  
-                  <div className="text-[#1E2937] font-medium mb-3">
-                    Demande: <span className="text-[#EF4444] font-semibold">{anomaly.demande}</span>
-                  </div>
-
-                  <button
-                    onClick={() => toggleAnomalyExpansion(anomaly.id)}
-                    className="flex items-center gap-1 text-sm text-[#003087] hover:text-[#002066] mb-3"
-                  >
-                    {expandedAnomalies.includes(anomaly.id) ? (
-                      <>Masquer les détails <ChevronUp size={16} /></>
-                    ) : (
-                      <>Voir le raisonnement IA <ChevronDown size={16} /></>
-                    )}
-                  </button>
-
-                  {expandedAnomalies.includes(anomaly.id) && (
-                    <div className="bg-white rounded-lg p-4 border border-red-200 mb-4">
-                      <div className="text-sm font-semibold text-[#1E2937] mb-3 flex items-center gap-2">
-                        <Brain size={16} className="text-[#003087]" />
-                        Raisonnement IA détaillé:
-                      </div>
-                      <ul className="space-y-2">
-                        {anomaly.reasoning.map((reason, idx) => (
-                          <li key={idx} className="text-sm text-[#64748B] flex items-start gap-2">
-                            <span className="text-[#EF4444] mt-1">•</span>
-                            <span>{reason}</span>
-                          </li>
-                        ))}
-                      </ul>
+                  </td>
+                  <td className="px-8 py-5">
+                    <div className="flex flex-col text-[#64748B]">
+                      <span className="text-xs font-bold">{new Date(anomaly.timestamp).toLocaleDateString()}</span>
+                      <span className="text-[10px]">{new Date(anomaly.timestamp).toLocaleTimeString()}</span>
                     </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between pt-4 border-t border-red-200">
-                <div className="flex items-center gap-2 text-xs text-[#64748B]">
-                  <Clock size={14} />
-                  Détecté le {anomaly.timestamp.toLocaleDateString('fr-FR', {
-                    day: '2-digit',
-                    month: 'long',
-                    year: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                  })}
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => handleIgnoreAnomaly(anomaly.id)}
-                    className="px-4 py-2 bg-white border border-[#E2E8F0] text-[#64748B] rounded-lg hover:bg-[#F8FAFC] transition-colors text-sm font-semibold flex items-center gap-2"
-                  >
-                    <XCircle size={16} />
-                    Ignorer
-                  </button>
-                  <button
-                    onClick={() => handleValidateAnomaly(anomaly.id)}
-                    className="px-4 py-2 bg-[#EF4444] text-white rounded-lg hover:bg-[#DC2626] transition-colors text-sm font-semibold flex items-center gap-2"
-                  >
-                    <CheckCircle size={16} />
-                    Valider Alerte
-                  </button>
-                </div>
-              </div>
-            </div>
-          ))}
+                  </td>
+                  <td className="px-8 py-5">
+                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button 
+                        onClick={() => navigate(`/ticket/${anomaly.ticketId}`)}
+                        className="p-2 bg-blue-50 text-[#003087] rounded-lg hover:bg-blue-100 transition-colors"
+                        title="Voir le ticket en détail"
+                      >
+                        <Eye size={18} />
+                      </button>
+                      <button 
+                        onClick={() => handleValidateAnomaly(anomaly.id)}
+                        className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors"
+                        title="Valider"
+                      >
+                        <CheckCircle size={18} />
+                      </button>
+                      <button 
+                        onClick={() => handleIgnoreAnomaly(anomaly.id)}
+                        className="p-2 bg-gray-50 text-gray-400 rounded-lg hover:bg-gray-100 transition-colors"
+                        title="Ignorer"
+                      >
+                        <X size={18} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
 

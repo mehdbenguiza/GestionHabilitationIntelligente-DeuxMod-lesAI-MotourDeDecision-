@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Download, Eye, RefreshCw, XCircle, Brain, ThumbsUp, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Download, Eye, RefreshCw, XCircle, Brain, ThumbsUp, ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react';
 import { Badge } from '../components/ui/badge';
 
 interface Ticket {
@@ -22,6 +22,8 @@ interface Ticket {
   // ✅ NOUVEAUX CHAMPS IA
   ai_level?: string;
   ai_confidence?: number;
+  is_anomalous?: boolean;
+  anomaly_severity?: string;
 }
 
 interface UserInfo {
@@ -375,11 +377,17 @@ export function TicketsPage() {
                   <td className="py-4 px-6 font-semibold text-[#003087]">{ticket.ref}</td>
                   <td className="py-4 px-6 text-[#1E2937]">{ticket.employee_name}</td>
                   <td className="py-4 px-6 text-[#64748B]">{ticket.team_name}</td>
-                  <td className="py-4 px-6">
-                    <Badge className={`${getAIBadgeColor(ticket.ai_level)} border`}>
+                  <td className="py-4 px-6 flex flex-col gap-1">
+                    <Badge className={`${getAIBadgeColor(ticket.ai_level)} border w-fit`}>
                       <Brain size={12} className="mr-1 inline" />
                       {getAIFr(ticket.ai_level)}
                     </Badge>
+                    {ticket.is_anomalous && (
+                      <Badge className="bg-amber-100 text-amber-800 border-amber-300 w-fit text-[10px] px-1 py-0 h-4">
+                        <AlertTriangle size={10} className="mr-1 inline" />
+                        Anomalie ({ticket.anomaly_severity})
+                      </Badge>
+                    )}
                   </td>
                   <td className="py-4 px-6 text-[#64748B]">{ticket.ai_confidence ? `${ticket.ai_confidence}%` : '-'}</td>
                   <td className="py-4 px-6">

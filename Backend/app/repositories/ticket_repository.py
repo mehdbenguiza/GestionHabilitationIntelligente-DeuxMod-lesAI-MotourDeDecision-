@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from app.repositories.base import BaseRepository
 from app.models.ticket import Ticket, TicketStatus
-from datetime import datetime
+from datetime import datetime, timezone
 
 class TicketRepository(BaseRepository[Ticket]):
     def __init__(self, db: Session):
@@ -26,7 +26,7 @@ class TicketRepository(BaseRepository[Ticket]):
         return self.update(ticket_id, {
             "status": TicketStatus.REJECTED,
             "rejected_reason": reason,
-            "rejected_at": datetime.utcnow(),
+            "rejected_at": datetime.now(timezone.utc),
             "rejected_by": rejected_by
         })
 
@@ -37,5 +37,5 @@ class TicketRepository(BaseRepository[Ticket]):
         return self.update(ticket_id, {
             "status": TicketStatus.ASSIGNED,
             "assigned_to": assigned_to,
-            "assigned_at": datetime.utcnow()
+            "assigned_at": datetime.now(timezone.utc)
         })

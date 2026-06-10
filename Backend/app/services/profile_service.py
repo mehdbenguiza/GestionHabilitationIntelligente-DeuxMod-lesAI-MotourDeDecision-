@@ -13,7 +13,7 @@ import secrets
 import string
 import unicodedata
 import hashlib
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 from sqlalchemy.orm import Session
 
@@ -21,6 +21,14 @@ from app.models.access_profile import AccessProfile, ProfileStatus
 from app.models.systeme import Systeme
 from app.models.ticket import Ticket
 from app.services import email_service as mail
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+JIT_DURATIONS = {
+    "CRITICAL":  4,     # 4 heures — accès très limité (extrême sensibilité)
+    "SENSITIVE": 72,    # 72 heures (3 jours)
+    "BASE":      None,  # Permanent (pas d'expiration)
+}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -186,6 +194,24 @@ class ProfileService:
             status        = ProfileStatus.ACTIVE,
             created_by    = approved_by,
         )
+
+        # ── V3.0 : JIT Access — définir l'expiration selon le niveau IA ──────────
+        ai_level = getattr(ticket, 'ai_level', None)
+        if not ai_level:
+            from app.models.classification_result import ClassificationResult
+            cls = ticket.classification
+            ai_level = cls.predicted_level if cls else "BASE"
+
+        expiry_hours = JIT_DURATIONS.get(ai_level or "BASE")
+        if expiry_hours:
+            profile.expiry_hours = expiry_hours
+            profile.expires_at   = datetime.now(timezone.utc) + timedelta(hours=expiry_hours)
+            print(
+                f"  ⏱️  [JIT] Accès temporaire : {expiry_hours}h "
+                f"(expire le {profile.expires_at.strftime('%d/%m/%Y %H:%M')} UTC)"
+            )
+        else:
+            print(f"  [OK]  [JIT] Accs permanent (niveau BASE)")
         db.add(profile)
         db.flush()  # obtenir l'ID sans commit
 
@@ -215,7 +241,7 @@ class ProfileService:
         profile.notification_sent_at  = datetime.now(timezone.utc) if email_sent else None
 
         print(
-            f"✅ [PROFILE] Profil '{account_name}' créé pour {ticket.employee_name} "
+            f"[OK] [PROFILE] Profil '{account_name}' créé pour {ticket.employee_name} "
             f"({ticket.ref}) | Email{'✓' if email_sent else '✗'}"
         )
         return profile
@@ -276,7 +302,7 @@ class ProfileService:
         profile.revoked_at    = datetime.now(timezone.utc)
         db.flush()
 
-        print(f"🔒 [PROFILE] Profil '{profile.account_name}' révoqué par {revoked_by}")
+        print(f" [PROFILE] Profil '{profile.account_name}' rvoqu par {revoked_by}")
         return profile
         
     def reactivate_profile(
@@ -298,7 +324,7 @@ class ProfileService:
         profile.revoked_at = None
         db.flush()
 
-        print(f"🔓 [PROFILE] Profil '{profile.account_name}' réactivé par {reactivated_by}")
+        print(f" [PROFILE] Profil '{profile.account_name}' ractiv par {reactivated_by}")
         return profile
 
     # ── Listing ──────────────────────────────────────────────────────────────

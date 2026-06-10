@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request, BackgroundTasks, Response
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import random
 import string
+import secrets
 import asyncio
 from app.database import get_db
 from app.models.user import DashboardUser
@@ -23,7 +24,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 reset_codes = {}
 
 def generate_otp():
-    return ''.join(random.choices(string.digits, k=6))
+    return ''.join(secrets.choice(string.digits) for _ in range(6))
 
 
 @router.post("/login")
@@ -51,7 +52,7 @@ def login(
         raise HTTPException(status_code=403, detail="Compte désactivé. Veuillez contacter votre superviseur.")
     
     # Mise à jour dernière connexion
-    user.lastLogin = datetime.utcnow()
+    user.lastLogin = datetime.now(timezone.utc)
     user.lastLoginIP = request.client.host if request.client else "127.0.0.1"
     
     # Historique via AuditService
@@ -162,7 +163,7 @@ def register(
         passwordHash=hashed,
         role=user.role,
         isActive=True,
-        createdAt=datetime.utcnow()
+        createdAt=datetime.now(timezone.utc)
     )
     db.add(new_user)
     db.commit()
@@ -187,7 +188,7 @@ def logout(
     # Calculer la durée de la session
     duration_str = "inconnue"
     if current_user.lastLogin:
-        duration = datetime.utcnow() - current_user.lastLogin
+        duration = datetime.now(timezone.utc) - current_user.lastLogin
         minutes = int(duration.total_seconds() // 60)
         hours = minutes // 60
         mins = minutes % 60
@@ -263,7 +264,7 @@ async def request_password_reset(
         # Stocker le code
         reset_codes[email] = {
             "code": otp_code,
-            "expires_at": datetime.utcnow() + timedelta(minutes=15),
+            "expires_at": datetime.now(timezone.utc) + timedelta(minutes=15),
             "attempts": 0,
             "user_id": user.id,
             "verified": False
@@ -345,7 +346,7 @@ async def verify_reset_code(
         reset_data = reset_codes[email]
         
         # Vérifier l'expiration
-        if datetime.utcnow() > reset_data["expires_at"]:
+        if datetime.now(timezone.utc) > reset_data["expires_at"]:
             del reset_codes[email]
             return JSONResponse(
                 status_code=400,
@@ -482,7 +483,7 @@ async def reset_password(
             )
         
         # Vérifier l'expiration
-        if datetime.utcnow() > reset_data["expires_at"]:
+        if datetime.now(timezone.utc) > reset_data["expires_at"]:
             del reset_codes[email]
             return JSONResponse(
                 status_code=400,
@@ -612,7 +613,7 @@ async def resend_reset_code(
         # Stocker le code
         reset_codes[email] = {
             "code": otp_code,
-            "expires_at": datetime.utcnow() + timedelta(minutes=15),
+            "expires_at": datetime.now(timezone.utc) + timedelta(minutes=15),
             "attempts": 0,
             "user_id": user.id,
             "verified": False

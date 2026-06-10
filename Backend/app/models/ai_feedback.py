@@ -13,7 +13,7 @@ def compute_profile_signature(application: str, environment: str, access_type: s
     partagent la même signature → la même correction s'applique.
     """
     raw = f"{application.upper()}|{environment.upper()}|{access_type.upper()}|{team.upper()}|{resource.upper()}"
-    return hashlib.md5(raw.encode()).hexdigest()
+    return hashlib.sha256(raw.encode()).hexdigest()
 
 
 class AIFeedback(Base):

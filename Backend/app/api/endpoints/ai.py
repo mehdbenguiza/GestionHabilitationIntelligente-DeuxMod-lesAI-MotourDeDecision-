@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.services.ai_service import ai_service   # ← Utiliser le singleton global, pas une nouvelle instance
@@ -37,7 +37,7 @@ async def classify_ticket(
     """
     try:
         # Convertir en dictionnaire
-        ticket_dict = ticket.dict()
+        ticket_dict = ticket.model_dump()
 
         # Ajouter des valeurs par défaut si manquantes
         if ticket_dict.get('hour') is None:
@@ -151,6 +151,79 @@ async def ai_decisions(db: Session = Depends(get_db)):
         })
         
     return result
+
+
+@router.get("/anomalies")
+async def get_real_anomalies(db: Session = Depends(get_db)):
+    """Récupère les anomalies réelles détectées par le Modèle 2 (Isolation Forest + Règles)"""
+    from app.models.anomaly_log import AnomalyLog
+    from app.models.ticket import Ticket
+    from app.models.decision_engine import DecisionEngine
+    
+    # On récupère les 20 dernières anomalies PENDING détectées
+    anomalies = db.query(AnomalyLog, Ticket, DecisionEngine).join(
+        Ticket, AnomalyLog.ticket_id == Ticket.id
+    ).join(
+        DecisionEngine, AnomalyLog.ticket_id == DecisionEngine.ticket_id, isouter=True
+    ).filter(
+        AnomalyLog.is_anomalous == True,
+        AnomalyLog.status == "PENDING"
+    ).order_by(AnomalyLog.analyzed_at.desc()).limit(20).all()
+    
+    result = []
+    for alog, ticket, decision in anomalies:
+        result.append({
+            "id": str(alog.id),
+            "ticketId": ticket.id,
+            "ticket": ticket.ref,
+            "demandeur": ticket.employee_name or ticket.employee_id,
+            "equipe": ticket.team_name,
+            "demande": ticket.description[:100] + "..." if len(ticket.description) > 100 else ticket.description,
+            "reasoning": alog.anomaly_flags if isinstance(alog.anomaly_flags, list) else [str(alog.anomaly_flags)] if alog.anomaly_flags is not None else [],
+            "timestamp": alog.analyzed_at.isoformat(),
+            "severity": alog.severity.lower() if alog.severity else 'high',
+            "score": round(alog.anomaly_score, 4) if alog.anomaly_score else 0
+        })
+        
+    return result
+
+
+@router.post("/anomalies/{anomaly_id}/resolve")
+async def resolve_anomaly(
+    anomaly_id: int, 
+    action: str, # "VALIDATED" | "IGNORED"
+    db: Session = Depends(get_db),
+    current_user: DashboardUser = Depends(get_current_user)
+):
+    """Marque une anomalie comme traitée (validée ou ignorée) et met à jour le ticket"""
+    from app.models.anomaly_log import AnomalyLog
+    from app.models.ticket import Ticket, TicketStatus
+    
+    alog = db.query(AnomalyLog).filter(AnomalyLog.id == anomaly_id).first()
+    if not alog:
+        raise HTTPException(status_code=404, detail="Anomalie introuvable")
+    
+    if action not in ["VALIDATED", "IGNORED"]:
+        raise HTTPException(status_code=400, detail="Action invalide")
+        
+    alog.status = action
+    alog.resolved_at = datetime.now(timezone.utc)
+    
+    # Rendre les actions fonctionnelles en rejetant le ticket si l'anomalie est validée
+    ticket = db.query(Ticket).filter(Ticket.id == alog.ticket_id).first()
+    if ticket:
+        if action == "VALIDATED":
+            ticket.status = TicketStatus.REJECTED
+            ticket.rejected_reason = f"Rejet de sécurité : Anomalie comportementale détectée et validée (Sévérité: {alog.severity})."
+            ticket.rejected_by = current_user.username
+            ticket.rejected_at = datetime.now(timezone.utc)
+        elif action == "IGNORED":
+            # L'anomalie est ignorée, le ticket reste en attente de traitement normal.
+            pass
+            
+    db.commit()
+    
+    return {"status": "success", "message": f"Anomalie {action.lower()} avec succès"}
 
 
 # ==================== RÉTRO-ENTRAÎNEMENT (Feedback Loop) ====================

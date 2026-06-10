@@ -43,6 +43,12 @@ interface Ticket {
   ai_source?: string;
   ai_consistency?: string;
   ai_recommended_action?: string;
+  is_anomalous?: boolean;
+  anomaly_severity?: string;
+  anomaly_score?: number;
+  anomaly_flags?: string[];
+  source?: string;
+  employee_submitted_at?: string;
   classification?: {
     predicted_level: string;
     confidence: number;
@@ -50,12 +56,19 @@ interface Ticket {
     explanation: string;
     risk_factors: Record<string, [number, string]>;
     source: string;
+    decision_source: string;
     consistency_status: string;
     consistency_message: string;
     triggered_rules: string[];
     risk_score_rules: number;
     recommended_action: string;
     confidence_level_label: string;
+    shap_values?: Record<string, number>;
+    nlp_score?: number;
+    nlp_label?: string;
+    trust_modifier?: number;
+    trust_label?: string;
+    trust_score?: number;
   };
 }
 
@@ -86,6 +99,23 @@ export function TicketDetailPage() {
   const [correctedReason, setCorrectedReason] = useState('');
   const [feedbackLoading, setFeedbackLoading] = useState(false);
   const [feedbackSuccess, setFeedbackSuccess] = useState(false);
+
+  // V3.0 MFA Modal
+  const [showMfaModal, setShowMfaModal] = useState(false);
+  const [mfaCode, setMfaCode] = useState('');
+  const [mfaLoading, setMfaLoading] = useState(false);
+  const [mfaErrorMsg, setMfaErrorMsg] = useState('');
+  const [mfaHint, setMfaHint] = useState('');
+  const [mfaCooldown, setMfaCooldown] = useState(0);
+
+  // Timer pour le renvoi MFA
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    if (mfaCooldown > 0) {
+      timer = setTimeout(() => setMfaCooldown(mfaCooldown - 1), 1000);
+    }
+    return () => clearTimeout(timer);
+  }, [mfaCooldown]);
 
   const token = localStorage.getItem('token');
 
@@ -282,12 +312,79 @@ export function TicketDetailPage() {
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ resolution: 'Demande approuvée' })
       });
-      if (!response.ok) throw new Error('Erreur lors de l\'approbation');
+      
+      // V3.0 : Si le backend réclame le MFA (428 Precondition Required)
+      if (response.status === 428) {
+        // Demander automatiquement la génération du code
+        const reqMfa = await fetch(`http://127.0.0.1:8000/tickets/${ticket.id}/request-mfa`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (reqMfa.ok) {
+           const mfaData = await reqMfa.json();
+           setMfaHint(mfaData.hint || 'Code envoyé.');
+           setMfaCooldown(60); // 60 secondes de cooldown
+           setShowMfaModal(true);
+           return;
+        } else {
+           throw new Error('Impossible de générer le code MFA.');
+        }
+      }
+
+      if (!response.ok) {
+        const d = await response.json().catch(()=>({}));
+        throw new Error(d?.detail?.message || 'Erreur lors de l\'approbation');
+      }
       await fetchTicket();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  const handleResendMfa = async () => {
+    if (!ticket || mfaCooldown > 0) return;
+    setMfaErrorMsg('');
+    try {
+      const response = await fetch(`http://127.0.0.1:8000/tickets/${ticket.id}/request-mfa`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        const mfaData = await response.json();
+        setMfaHint(mfaData.hint || 'Code envoyé.');
+        setMfaCooldown(60);
+      } else {
+        throw new Error('Erreur lors du renvoi du code.');
+      }
+    } catch (err) {
+      setMfaErrorMsg(err instanceof Error ? err.message : 'Erreur réseau.');
+    }
+  };
+
+  const submitMfaApprove = async () => {
+    if (!ticket || !mfaCode) return;
+    setMfaLoading(true);
+    setMfaErrorMsg('');
+    try {
+      const response = await fetch(`http://127.0.0.1:8000/tickets/${ticket.id}/approve`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resolution: 'Demande approuvée après validation MFA', mfa_code: mfaCode })
+      });
+      
+      if (!response.ok) {
+        const d = await response.json();
+        throw new Error(d?.detail?.message || 'Code invalide');
+      }
+      setShowMfaModal(false);
+      setMfaCode('');
+      await fetchTicket();
+    } catch (err) {
+      setMfaErrorMsg(err instanceof Error ? err.message : 'Erreur');
+    } finally {
+      setMfaLoading(false);
     }
   };
 
@@ -600,7 +697,103 @@ export function TicketDetailPage() {
                 </div>
               )}
 
-              {/* ── COHÉRENCE DE LA DÉCISION (Requirement) ── */}
+              {/* ── Modèle 2 : Anomalies Comportementales ── */}
+              {ticket.is_anomalous && (
+                <div className="bg-amber-50 rounded-xl p-4 border border-amber-200 shadow-sm mt-4">
+                  <div className="text-[10px] font-black text-amber-800 uppercase tracking-widest mb-2 flex items-center gap-1">
+                    <AlertTriangle size={12}/> Anomalie Comportementale Détectée
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-amber-900 font-medium">Sévérité :</span>
+                      <Badge className="bg-amber-200 text-amber-900 border-amber-300 font-bold uppercase">{ticket.anomaly_severity}</Badge>
+                    </div>
+                    {ticket.anomaly_flags && ticket.anomaly_flags.length > 0 && (
+                      <div className="mt-1">
+                        <span className="text-xs text-amber-800 font-semibold">Signaux détectés :</span>
+                        <ul className="list-disc list-inside text-xs text-amber-700 mt-1 space-y-0.5">
+                          {ticket.anomaly_flags.map((flag, idx) => {
+                            const parts = flag.split(':');
+                            const name = parts[0].replace('ANOMALY_', '').replace(/_/g, ' ');
+                            const detail = parts[1] ? ` (${parts[1]})` : '';
+                            return <li key={idx}><span className="font-semibold">{name}</span>{detail}</li>;
+                          })}
+                        </ul>
+                      </div>
+                    )}
+                    {ticket.anomaly_score !== undefined && ticket.anomaly_score !== null && (
+                      <div className="flex justify-between items-center mt-1 border-t border-amber-200/50 pt-2">
+                        <span className="text-xs text-amber-800 font-semibold">Score Isolation Forest :</span>
+                        <span className="text-xs font-mono font-bold text-amber-900">{ticket.anomaly_score.toFixed(3)}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* ── V3.0 : Analyse Sémantique NLP & Trust Score ── */}
+              {(ticket.classification?.nlp_score !== undefined || ticket.classification?.trust_score !== undefined) && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+                  {ticket.classification?.nlp_score !== undefined && (
+                    <div className="bg-white rounded-xl p-4 border border-indigo-100 shadow-sm">
+                      <div className="text-[10px] font-black text-indigo-800 uppercase tracking-widest mb-1 flex items-center gap-1"><Sparkles size={12}/> Sémantique NLP</div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-bold text-sm">{ticket.classification.nlp_label}</span>
+                        <span className="font-bold text-indigo-600">{ticket.classification.nlp_score}/100</span>
+                      </div>
+                      <Progress value={ticket.classification.nlp_score} className="h-1.5" />
+                    </div>
+                  )}
+                  {ticket.classification?.trust_score !== undefined && (
+                    <div className="bg-white rounded-xl p-4 border border-teal-100 shadow-sm">
+                      <div className="text-[10px] font-black text-teal-800 uppercase tracking-widest mb-1 flex items-center gap-1"><ShieldCheck size={12}/> Trust Score Employé</div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-bold text-sm">{ticket.classification.trust_label}</span>
+                        <span className="font-bold text-teal-600">{ticket.classification.trust_score}/100</span>
+                      </div>
+                      <Progress value={ticket.classification.trust_score} className="h-1.5" />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ── V3.0 : SHAP Values explainability ── */}
+              {ticket.classification?.shap_values && (
+                <div className="mt-4 p-4 bg-white/60 border border-purple-100 rounded-xl space-y-3">
+                  <div className="text-[10px] font-black text-purple-800 uppercase tracking-widest flex items-center gap-1">
+                     <Brain size={12}/> Contribution des Signaux (Top 5)
+                  </div>
+                  <div className="space-y-2">
+                    {Object.entries(ticket.classification.shap_values).map(([feature, val]) => (
+                      <div key={feature} className="flex items-center gap-3">
+                         <div className="w-[120px] text-xs font-mono truncate" title={feature}>{feature}</div>
+                         <div className="flex-1 flex items-center">
+                            {val < 0 ? (
+                               <div className="flex flex-1 justify-end">
+                                  <div style={{width: `${Math.min(Math.abs(val)*20, 100)}%`}} className="h-2 bg-emerald-400 rounded-l-sm" />
+                               </div>
+                            ) : (
+                               <div className="flex-1" />
+                            )}
+                            <div className="w-px h-3 bg-slate-300 mx-1" />
+                            {val > 0 ? (
+                               <div className="flex flex-1 justify-start">
+                                  <div style={{width: `${Math.min(val*20, 100)}%`}} className="h-2 bg-rose-400 rounded-r-sm" />
+                               </div>
+                            ) : (
+                               <div className="flex-1" />
+                            )}
+                         </div>
+                         <div className={`w-12 text-right text-xs font-bold ${val > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                           {val > 0 ? '+' : ''}{val.toFixed(2)}
+                         </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* ── COHÉRENCE DE LA DÉCISION ── */}
               {ticket.classification?.consistency_status && (
                 <div className={`rounded-xl p-5 border-2 ${
                   ticket.classification.consistency_status === 'OK' 
@@ -651,56 +844,230 @@ export function TicketDetailPage() {
                   )}
                 </div>
                 
-                {ticket.ai_explanation ? (
-                  <div className="space-y-4">
-                    <div className="p-4 bg-[#F8FAFC] rounded-xl border border-blue-50 text-[#1E2937] text-sm leading-relaxed font-medium italic relative">
-                      <div className="absolute top-0 right-0 p-2 opacity-5">
-                        <Brain size={48} />
+                {ticket.classification?.risk_score_rules !== undefined ? (
+                  <div className="space-y-6">
+                    
+                    {/* ── PILLIER 1 : MODÈLE ML (XGBoost/RF) ── */}
+                    <div className="bg-[#F8FAFC] border border-slate-200 rounded-xl overflow-hidden">
+                      <div className="bg-blue-50 border-b border-slate-200 p-4 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-blue-100 text-blue-600 rounded-lg"><Cpu size={20} /></div>
+                          <div>
+                            <div className="text-[11px] font-black text-blue-500 uppercase tracking-widest">Pillier 1</div>
+                            <div className="text-sm font-bold text-slate-800">Modèle de Classification Machine Learning</div>
+                          </div>
+                        </div>
+                        <Badge className={`${getNiveauBadgeColor(ticket.classification.predicted_level)} font-bold text-xs px-3 py-1`}>
+                          {ticket.classification.predicted_level}
+                        </Badge>
                       </div>
-                      "{ticket.ai_explanation}"
+                      <div className="p-4 bg-white">
+                        <p className="text-sm text-slate-600 mb-4">
+                          Le modèle prédictif a analysé l'historique des requêtes similaires et a défini ce niveau de base avec une 
+                          certitude de <span className="font-bold text-slate-800">{ticket.ai_confidence}%</span>.
+                        </p>
+                        
+                        {ticket.classification.probabilities && Object.keys(ticket.classification.probabilities).length > 0 && (
+                          <div className="space-y-2 mt-4 border-t border-slate-100 pt-4">
+                            <div className="text-[10px] font-black text-[#64748B] uppercase tracking-widest mb-3">Probabilités par classe :</div>
+                            <div className="flex flex-col gap-2">
+                              {Object.entries(ticket.classification.probabilities).map(([cls, prob]) => {
+                                const pVal = typeof prob === 'number' ? prob : 0;
+                                return (
+                                  <div key={cls} className="flex items-center gap-3">
+                                    <div className="w-20 text-xs font-bold text-slate-600">{cls}</div>
+                                    <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+                                      <div 
+                                        className={`h-full rounded-full ${cls === 'CRITICAL' ? 'bg-red-400' : cls === 'SENSITIVE' ? 'bg-amber-400' : 'bg-emerald-400'}`} 
+                                        style={{ width: `${pVal * 100}%` }}
+                                      />
+                                    </div>
+                                    <div className="w-12 text-right text-[10px] font-bold text-slate-500">{(pVal * 100).toFixed(1)}%</div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
 
-                    {/* Règles expertes triggered_rules */}
-                    {ticket.classification?.triggered_rules && ticket.classification.triggered_rules.length > 0 && (
-                      <div className="space-y-2">
-                        <div className="text-[10px] font-black text-[#64748B] uppercase tracking-widest">Règles expertes appliquées :</div>
-                        <div className="flex flex-wrap gap-1.5">
-                          {ticket.classification.triggered_rules.map((rule, ri) => (
-                            <div key={ri} className="flex items-center gap-2 py-1 px-2.5 bg-slate-50 border border-slate-100 rounded-lg text-[11px] font-medium text-slate-600">
-                              <Shield size={10} className="text-blue-400" />
-                              {rule}
-                            </div>
-                          ))}
+                    {/* ── PILLIER 2 : RÈGLES MÉTIER & EXPERTISE ── */}
+                    <div className="bg-[#F8FAFC] border border-slate-200 rounded-xl overflow-hidden">
+                      <div className="bg-emerald-50 border-b border-slate-200 p-4 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-emerald-100 text-emerald-600 rounded-lg"><Shield size={20} /></div>
+                          <div>
+                            <div className="text-[11px] font-black text-emerald-500 uppercase tracking-widest">Pillier 2</div>
+                            <div className="text-sm font-bold text-slate-800">Moteur de Règles Métier & Analyse Sémantique</div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-semibold text-slate-500">Score calculé :</span>
+                          <span className={`text-lg font-black ${ticket.classification.risk_score_rules > 80 ? 'text-red-600' : 'text-emerald-600'}`}>
+                            {ticket.classification.risk_score_rules} pts
+                          </span>
                         </div>
                       </div>
-                    )}
-                    
-                    {/* Facteurs de risque (breakdown) */}
-                    {ticket.ai_risk_factors && Object.keys(ticket.ai_risk_factors).length > 0 && (
-                      <div className="space-y-3 pt-2">
-                        <div className="text-[10px] font-black text-[#64748B] uppercase tracking-widest">Analyse granulaire des points de risque :</div>
-                        <div className="grid grid-cols-1 gap-2">
-                          {Object.entries(ticket.ai_risk_factors)
-                            .sort(([, a], [, b]) => Math.abs(b[0]) - Math.abs(a[0]))
-                            .map(([key, [pts, desc]]) => (
-                              <div key={key} className="flex items-center gap-4 bg-[#F8FAFC]/50 p-2 rounded-lg border border-transparent hover:border-slate-200 transition-all">
-                                <div className={`w-12 text-right shrink-0 font-black text-sm ${pts > 0 ? 'text-red-500' : 'text-emerald-600'}`}>
-                                  {pts > 0 ? `+${pts}` : pts}
+                      <div className="p-4 bg-white space-y-5">
+                        
+                        {ticket.classification.triggered_rules && ticket.classification.triggered_rules.length > 0 && (
+                          <div>
+                            <div className="text-[10px] font-black text-[#64748B] uppercase tracking-widest mb-2">Règles métier déclenchées :</div>
+                            <div className="flex flex-wrap gap-2">
+                              {ticket.classification.triggered_rules.map((rule, ri) => (
+                                <div key={ri} className="flex items-center gap-2 py-1 px-2.5 bg-slate-50 border border-slate-200 rounded-lg text-[11px] font-medium text-slate-600">
+                                  <Shield size={10} className="text-emerald-400" />
+                                  {rule}
                                 </div>
-                                <div className="flex-1">
-                                  <div className="text-[11px] font-bold text-[#1E2937]">{desc}</div>
-                                  <div className="h-1 mt-1 rounded-full bg-slate-100 overflow-hidden">
-                                    <div
-                                      className={`h-full rounded-full transition-all duration-1000 ${pts > 40 ? 'bg-red-500' : pts > 20 ? 'bg-amber-500' : 'bg-emerald-500'}`}
-                                      style={{ width: `${Math.min(Math.abs(pts), 60) * 1.6}%` }}
-                                    />
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {ticket.ai_risk_factors && Object.keys(ticket.ai_risk_factors).length > 0 && (
+                          <div className="border-t border-slate-100 pt-4">
+                            <div className="text-[10px] font-black text-[#64748B] uppercase tracking-widest mb-3">Détail des points additionnés :</div>
+                            <div className="grid grid-cols-1 gap-1.5">
+                              {Object.entries(ticket.ai_risk_factors)
+                                .filter(([key]) => key !== 'ANOMALY_BOOST') // On masque l'anomalie ici pour la mettre dans le pilier 3
+                                .sort(([, a], [, b]) => Math.abs(b[0]) - Math.abs(a[0]))
+                                .map(([key, [pts, desc]]) => (
+                                  <div key={key} className="flex items-center gap-3 p-1.5 hover:bg-slate-50 rounded transition-colors">
+                                    <div className={`w-10 text-right font-black text-xs ${pts > 0 ? 'text-red-500' : 'text-emerald-600'}`}>
+                                      {pts > 0 ? `+${pts}` : pts}
+                                    </div>
+                                    <div className="text-xs font-medium text-slate-700">{desc}</div>
                                   </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* ── PILLIER 3 : ANOMALIES COMPORTEMENTALES ── */}
+                    <div className="bg-[#F8FAFC] border border-slate-200 rounded-xl overflow-hidden">
+                      <div className="bg-amber-50 border-b border-slate-200 p-4 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-amber-100 text-amber-600 rounded-lg"><AlertTriangle size={20} /></div>
+                          <div>
+                            <div className="text-[11px] font-black text-amber-500 uppercase tracking-widest">Pillier 3</div>
+                            <div className="text-sm font-bold text-slate-800">Modèle d'Anomalie Comportementale (Isolation Forest)</div>
+                          </div>
+                        </div>
+                        <Badge className={`${ticket.is_anomalous ? 'bg-amber-200 text-amber-900 border-amber-300' : 'bg-slate-200 text-slate-600 border-slate-300'} font-bold text-xs px-3 py-1`}>
+                          {ticket.anomaly_severity || 'AUCUNE'}
+                        </Badge>
+                      </div>
+                      <div className="p-4 bg-white">
+                        
+                        {ticket.is_anomalous ? (
+                          <div className="space-y-4">
+                            <p className="text-sm text-slate-600">
+                              Le modèle d'anomalie a détecté un comportement suspect basé sur l'heure, le jour de soumission, ou un volume inhabituel.
+                              {ticket.anomaly_score !== null && ticket.anomaly_score !== undefined && (
+                                <span className="ml-1 font-semibold text-slate-800">Score d'anomalie (IF) : {ticket.anomaly_score.toFixed(3)}</span>
+                              )}
+                            </p>
+                            
+                            {ticket.anomaly_flags && ticket.anomaly_flags.length > 0 && (
+                              <div className="space-y-2">
+                                <div className="text-[10px] font-black text-[#64748B] uppercase tracking-widest">Signaux détectés :</div>
+                                <div className="flex flex-col gap-2">
+                                  {ticket.anomaly_flags.map((flag, idx) => (
+                                    <div key={idx} className="flex items-center gap-2 text-xs font-medium text-amber-800 bg-amber-50/50 p-2 rounded border border-amber-100">
+                                      <AlertTriangle size={12} className="text-amber-500" />
+                                      {flag.replace('ANOMALY_', '').replace(/_/g, ' ')}
+                                    </div>
+                                  ))}
                                 </div>
                               </div>
-                            ))}
+                            )}
+
+                            {ticket.ai_risk_factors && ticket.ai_risk_factors['ANOMALY_BOOST'] && (
+                              <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-between">
+                                <span className="text-xs font-bold text-slate-600">Impact sur le score final :</span>
+                                <span className="text-sm font-black text-red-500">+{ticket.ai_risk_factors['ANOMALY_BOOST'][0]} pts</span>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-slate-500 italic text-center py-2">
+                            Aucune anomalie comportementale ou temporelle n'a été détectée lors de la soumission de cette demande.
+                          </p>
+                        )}
+                        
+                      </div>
+                    </div>
+                    
+                    {/* SCORE FINAL */}
+                    <div className="flex flex-col gap-3 bg-white shadow-md p-5 rounded-xl border border-slate-200 mt-6">
+                      <div className="flex items-center gap-4">
+                        <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                          <div className={`text-center font-black text-3xl leading-none ${ticket.classification!.risk_score_rules > 80 ? 'text-red-600' : 'text-emerald-600'}`}>
+                            {ticket.classification!.risk_score_rules}
+                          </div>
+                          <div className="text-[9px] font-bold text-slate-400 mt-1.5 uppercase tracking-widest text-center">Points</div>
+                        </div>
+                        <div className="flex-1">
+                          <div className="text-lg font-black text-[#1E2937] uppercase tracking-tight flex items-center gap-2">
+                            Score Final Calculé
+                          </div>
+                          <div className="text-xs font-medium text-slate-500 mt-1">
+                            Calcul mathématique détaillé de la décision IA (Formule de fusion) :
+                          </div>
                         </div>
                       </div>
-                    )}
+                      
+                      <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 font-mono text-sm overflow-x-auto whitespace-nowrap flex items-center gap-2 mt-2">
+                        <span className="font-bold text-slate-400">0</span>
+                        <span className="text-slate-400 font-bold px-1">+</span>
+                        {Object.entries(ticket.ai_risk_factors || {})
+                          .sort(([, a], [, b]) => Math.abs(b[0]) - Math.abs(a[0]))
+                          .map(([key, [pts, desc]], idx, arr) => (
+                            <span key={key} className="flex items-center">
+                              <span className={`font-bold px-1.5 py-0.5 rounded ${pts > 0 ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                {pts > 0 ? `+${pts}` : pts}
+                              </span>
+                              <span className="text-[10px] text-slate-500 ml-1.5 mr-1 font-sans font-semibold uppercase tracking-wider">
+                                ({key === 'ANOMALY_BOOST' ? 'Anomalie' : key === 'nlp_ana' ? 'NLP' : key === 'trust_ana' ? 'Trust' : 'Règle'})
+                              </span>
+                              {idx < arr.length - 1 && <span className="text-slate-400 font-bold mx-2">+</span>}
+                            </span>
+                        ))}
+                        
+                        {(() => {
+                          const rawSum = Object.values(ticket.ai_risk_factors || {}).reduce((acc, curr) => acc + curr[0], 0);
+                          const finalScore = ticket.classification!.risk_score_rules;
+                          
+                          if (rawSum !== finalScore) {
+                            return (
+                              <>
+                                <span className="text-slate-400 font-bold px-3">=</span>
+                                <span className="font-bold text-slate-400 line-through mr-2">{rawSum}</span>
+                                <span className="text-slate-400 font-bold italic text-xs mr-2">
+                                  (Plafonné à {finalScore === 200 ? '200 max' : '0 min'}) ➜
+                                </span>
+                                <span className={`font-black text-lg px-3 py-1 rounded shadow-sm ${finalScore > 80 ? 'bg-red-500 text-white' : 'bg-emerald-500 text-white'}`}>
+                                  {finalScore} pts
+                                </span>
+                              </>
+                            );
+                          } else {
+                            return (
+                              <>
+                                <span className="text-slate-400 font-bold px-3">=</span>
+                                <span className={`font-black text-lg px-3 py-1 rounded shadow-sm ${finalScore > 80 ? 'bg-red-500 text-white' : 'bg-emerald-500 text-white'}`}>
+                                  {finalScore} pts
+                                </span>
+                              </>
+                            );
+                          }
+                        })()}
+                      </div>
+                    </div>
+
                   </div>
                 ) : (
                   <div className="p-4 bg-slate-50 rounded-xl text-center italic text-[#64748B] text-sm">
@@ -1088,6 +1455,52 @@ export function TicketDetailPage() {
               >
                 {feedbackLoading ? <RefreshCw size={18} className="animate-spin" /> : <Sparkles size={18} />}
                 Enregistrer la correction
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal d'Approbation Sécurisée (MFA) — V3.0 ── */}
+      {showMfaModal && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex justify-center items-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl p-6 border border-slate-100 animate-fade-in text-center">
+            <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-4 text-blue-600">
+              <Key size={32} />
+            </div>
+            
+            <h2 className="text-xl font-bold text-[#1E2937] mb-2">Vérification de Sécurité Requise</h2>
+            <p className="text-sm text-slate-500 mb-6">Ce ticket a été classifié comme <strong>CRITIQUE</strong>. Une étape de vérification supplémentaire (MFA) est requise.</p>
+            
+            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 mb-6 text-left">
+              <p className="text-xs text-slate-500 font-medium mb-3 flex items-center gap-2"><AlertCircle size={14}/> {mfaHint}</p>
+              <input
+                type="text"
+                placeholder="Ex. 482915"
+                value={mfaCode}
+                onChange={(e) => setMfaCode(e.target.value.replace(/[^0-9]/g, '').substring(0, 6))}
+                className="w-full h-12 text-center text-2xl tracking-[0.5em] font-black border border-slate-200 bg-white rounded-xl text-[#003087] focus:outline-none focus:ring-2 focus:ring-[#003087]"
+              />
+              {mfaErrorMsg && <p className="text-red-500 text-xs font-bold mt-2 text-center">{mfaErrorMsg}</p>}
+            </div>
+
+            {/* Bouton Renvoyer le code */}
+            <div className="mb-6 text-center">
+              <button 
+                onClick={handleResendMfa}
+                disabled={mfaCooldown > 0}
+                className={`text-sm text-center font-bold ${mfaCooldown > 0 ? 'text-slate-400 cursor-not-allowed' : 'text-[#003087] hover:underline'}`}
+              >
+                {mfaCooldown > 0 ? `Renvoyer le code (${mfaCooldown}s)` : 'Je n\'ai pas reçu le code'}
+              </button>
+            </div>
+
+            <div className="flex gap-3">
+              <button onClick={() => {setShowMfaModal(false); setMfaCode('');}} disabled={mfaLoading} className="flex-1 py-3 text-slate-500 font-bold hover:bg-slate-50 rounded-xl transition-colors bg-white border border-slate-200">
+                Annuler
+              </button>
+              <button onClick={submitMfaApprove} disabled={mfaLoading || mfaCode.length < 6} className="flex-1 py-3 bg-[#003087] text-white font-bold rounded-xl shadow-md hover:bg-[#002066] disabled:opacity-50">
+                {mfaLoading ? 'Validation...' : 'Valider'}
               </button>
             </div>
           </div>

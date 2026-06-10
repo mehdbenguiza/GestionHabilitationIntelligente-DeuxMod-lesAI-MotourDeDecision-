@@ -9,6 +9,7 @@ from app.services.itop_service import ITopService
 from app.services.ai_service import ai_service
 from app.services.profile_service import profile_service
 from app.services.audit_service import audit_service
+from app.services.trust_score_service import trust_score_service
 from app.models.classification_result import ClassificationResult
 from app.models.ticket import Ticket, TicketStatus
 from app.models.user import DashboardUser
@@ -39,6 +40,19 @@ def _enrich_ticket_with_ai(ticket: Ticket) -> Ticket:
         ticket.ai_level = None
         ticket.ai_confidence = None
         ticket.ai_probabilities = None
+
+    # ── V3.0 : Enrichissement Modèle 2 (Anomalies) ──
+    latest_anomaly = ticket.anomaly_logs[0] if getattr(ticket, "anomaly_logs", None) else None
+    if latest_anomaly:
+        ticket.is_anomalous = latest_anomaly.is_anomalous
+        ticket.anomaly_severity = latest_anomaly.severity
+        ticket.anomaly_flags = latest_anomaly.anomaly_flags
+        ticket.anomaly_score = latest_anomaly.anomaly_score
+    else:
+        ticket.is_anomalous = False
+        ticket.anomaly_severity = "NONE"
+        ticket.anomaly_flags = []
+        ticket.anomaly_score = None
 
     return ticket
 
@@ -98,7 +112,7 @@ class TicketService:
         self.db.commit()
 
         return {
-            "message": f"{synced_count} nouveaux tickets synchronisés",
+            "message": f"{synced_count} nouveaux tickets synchroniss",
             "total": len(itop_tickets),
             "tickets": [t.id for t in new_tickets]
         }
@@ -124,7 +138,7 @@ class TicketService:
             )
         except Exception as e:
             # Ne pas bloquer l'approbation si la création du profil échoue
-            print(f"⚠️ [PROFILE] Erreur création profil pour {ticket.ref}: {e}")
+            print(f"[!] [PROFILE] Erreur cration profil pour {ticket.ref}: {e}")
 
         # ── 2. Mettre à jour iTop ──
         self.itop_service.update_ticket_status(ticket.ref, "approved", resolution)
@@ -142,11 +156,13 @@ class TicketService:
             niveau_acces=ticket.ai_level or "Inconnu",
             details={
                 "resolution": resolution,
-                "message": "Ticket approuvé — Profil d'accès créé — Email envoyé (simulation iTop)"
+                "message": "Ticket approuv  Profil d'accs cr  Email envoy (simulation iTop)"
             }
         )
+        # ── V3.0 : Mise à jour du Trust Score de l'employé ──
+        if ticket.employee_id:
+            trust_score_service.update_after_decision(ticket.employee_id, "approved", self.db)
         self.db.commit()
-
         return ticket
 
     def reject_ticket(self, ticket_id: int, reason: str, current_user: DashboardUser) -> Ticket:
@@ -169,7 +185,7 @@ class TicketService:
                 rejected_by = current_user.fullName or current_user.username,
             )
         except Exception as e:
-            print(f"⚠️ [EMAIL] Erreur notification rejet pour {ticket.ref}: {e}")
+            print(f"[!] [EMAIL] Erreur notification rejet pour {ticket.ref}: {e}")
 
         # ── 2. Mettre à jour iTop ──
         self.itop_service.update_ticket_status(ticket.ref, "rejected", reason)
@@ -188,11 +204,13 @@ class TicketService:
             niveau_acces=ticket.ai_level or "Inconnu",
             details={
                 "motif": reason,
-                "message": "Ticket rejeté — Email envoyé à l'employé (simulation iTop)"
+                "message": "Ticket rejet  Email envoy  l'employ (simulation iTop)"
             }
         )
+        # ── V3.0 : Mise à jour du Trust Score (punit les rejets) ──
+        if ticket.employee_id:
+            trust_score_service.update_after_decision(ticket.employee_id, "rejected", self.db)
         self.db.commit()
-
         return ticket
 
     def escalate_ticket(self, ticket_id: int, escalate_to: str, current_user: DashboardUser) -> Ticket:
@@ -211,7 +229,7 @@ class TicketService:
             resultat="Alerte",
             environnement=ticket.requested_environments[0] if ticket.requested_environments else "Inconnu",
             niveau_acces=ticket.ai_level or "Inconnu",
-            details={"escaladé_vers": escalate_to, "message": "Nécessite validation supérieure"}
+            details={"escalad_vers": escalate_to, "message": "Ncessite validation suprieure"}
         )
         self.db.commit()
         
@@ -332,6 +350,28 @@ class TicketService:
 
         # Description naturelle selon le profil
         seniority_label = "Junior" if user_seniority == "junior" else "Senior"
+
+        # ── Modèle 2 : Générer un timestamp de soumission RÉALISTE ──────────
+        # Les tickets ADMIN_SIMULATION reçoivent un employee_submitted_at fictif
+        # mais réaliste (lundi-vendredi, 08h-17h) pour ne pas polluer les stats.
+        # Le modèle d'anomalie ignorera de toute façon les ADMIN_SIMULATION,
+        # mais c'est une bonne pratique de cohérence.
+        from datetime import timedelta
+        base_now = datetime.now()
+        # Choisir un jour ouvré dans les 5 derniers jours
+        days_back = random.randint(0, 4)
+        candidate = base_now - timedelta(days=days_back)
+        # Si on tombe sur weekend, reculer au vendredi
+        while candidate.weekday() >= 5:
+            candidate -= timedelta(days=1)
+        # Heure aléatoire entre 08h00 et 17h00
+        sim_hour   = random.randint(8, 16)
+        sim_minute = random.randint(0, 59)
+        employee_submitted_at = candidate.replace(
+            hour=sim_hour, minute=sim_minute, second=0, microsecond=0
+        )
+        # ────────────────────────────────────────────────────────────────────
+
         new_ticket = self.ticket_repo.create({
             "ref": f"SIM-{datetime.now().strftime('%Y%m%d%H%M%S')}-{random.randint(100, 999)}",
             "status": TicketStatus.NEW,
@@ -354,8 +394,11 @@ class TicketService:
                 "user_seniority":           user_seniority,
                 "request_reason":           request_reason,
                 "manager_approval_status":  approval_status,
-                "justification":            f"Simulation bancaire — profil {seniority_label}",
+                "justification":            f"Simulation bancaire  profil {seniority_label}",
             },
+            # ── Modèle 2 : Source = admin simulation, jamais analysé pour anomalie ──
+            "source": "ADMIN_SIMULATION",
+            "employee_submitted_at": employee_submitted_at,
         })
 
         # Classification IA automatique
@@ -393,6 +436,6 @@ class TicketService:
             created.append(result["ticket"])
 
         return {
-            "message": f"{len(created)} tickets simulés créés",
+            "message": f"{len(created)} tickets simuls crs",
             "tickets": created
         }

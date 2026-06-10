@@ -14,16 +14,24 @@ import { AdminsPage } from './pages/AdminsPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { AILabPage } from './pages/AILabPage';
 import { HabilitationsPage } from './pages/HabilitationsPage';
+import { LandingPage } from './pages/LandingPage';
+import { EmployeePortalPage } from './pages/EmployeePortalPage';
 
 // Importer les loaders
 import { requireAuthLoader, requireSuperAdminLoader } from '../utils/authLoaders';
 
 export const router = createBrowserRouter([
   
-  // Redirection racine vers login
+  // Page d'accueil : choix Admin / Employé
   {
     path: '/',
-    element: <Navigate to="/login" replace />,
+    element: <LandingPage />,
+  },
+
+  // Espace employé (public)
+  {
+    path: '/employee',
+    element: <EmployeePortalPage />,
   },
 
   // Page login (publique)

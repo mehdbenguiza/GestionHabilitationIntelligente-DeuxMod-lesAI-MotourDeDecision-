@@ -9,7 +9,8 @@ def login():
     """Se connecter pour obtenir le token"""
     response = requests.post(
         f"{API_URL}/auth/login",
-        json={"username": "superadmin", "password": "superadmin"}
+        json={"username": "superadmin", "password": "superadmin"},
+        timeout=10
     )
     if response.status_code == 200:
         return response.json()["access_token"]
@@ -23,7 +24,8 @@ def create_ticket(token, ticket_data):
     response = requests.post(
         f"{API_URL}/tickets/simulate/create",
         headers=headers,
-        json=ticket_data
+        json=ticket_data,
+        timeout=10
     )
     return response
 

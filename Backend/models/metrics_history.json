@@ -63,5 +63,35 @@
       "SENSITIVE": 1428,
       "CRITICAL": 1192
     }
+  },
+  {
+    "date": "2026-04-23T10:25:08.579593",
+    "model_name": "XGBoost V3.0",
+    "total_tickets": 5272,
+    "human_tickets": 25,
+    "accuracy": 0.8976,
+    "cv_mean": 0.8877,
+    "cv_std": 0.0117,
+    "label_distribution": {
+      "BASE": 2652,
+      "CRITICAL": 1192,
+      "SENSITIVE": 1428
+    },
+    "trigger": "active_learning"
+  },
+  {
+    "date": "2026-04-28T08:48:53.418786",
+    "model_name": "XGBoost V3.0",
+    "total_tickets": 5309,
+    "human_tickets": 59,
+    "accuracy": 0.8861,
+    "cv_mean": 0.8843,
+    "cv_std": 0.0117,
+    "label_distribution": {
+      "BASE": 2683,
+      "CRITICAL": 1198,
+      "SENSITIVE": 1428
+    },
+    "trigger": "active_learning"
   }
 ]

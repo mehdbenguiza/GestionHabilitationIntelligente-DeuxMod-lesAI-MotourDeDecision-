@@ -2,13 +2,18 @@
 
 import joblib
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from app.services.feature_extractor import FeatureExtractor
 from app.models.classification_result import ClassificationResult
 from app.models.decision_engine import DecisionEngine
 from app.models.ticket import Ticket, TicketStatus
+from app.models.automation_rule import AutomationRule
 from app.services.audit_service import audit_service
+from app.services.nlp_service import nlp_service
+from app.services.trust_score_service import trust_score_service
+from app.services.anomaly_service import anomaly_service
+from app.services.decision_fusion_service import decision_fusion_service
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Constantes partagées (Alignées sur le nouveau generator)
@@ -166,7 +171,7 @@ def _build_explanation(level: str, factors: dict, confidence: float, source: str
     """
     Génère une explication triée par importance avec note de cohérence (Requirement 1, 3, 4, 8).
     """
-    risk_label = RISK_LABEL_VERBOSE.get(level, "Niveau indéterminé")
+    risk_label = RISK_LABEL_VERBOSE.get(level, "Niveau indtermin")
     total_score = sum([v[0] for v in factors.values()])
     
     # Requirement 3: Tri par importance (valeur absolue des points)
@@ -178,11 +183,11 @@ def _build_explanation(level: str, factors: dict, confidence: float, source: str
 
     # Requirement 8 & 10 (v2.0): Niveaux de confiance pro
     if confidence < 0.60:
-        confidence_note = "📌 Note : Faible confiance - décision incertaine (analyse ML divergente)"
+        confidence_note = "[NOTE] Note : Faible confiance - décision incertaine (analyse ML divergente)"
     elif confidence < 0.80:
-        confidence_note = "✅ Note : Confiance modérée"
+        confidence_note = "[OK] Note : Confiance modérée"
     else:
-        confidence_note = "🚀 Note : Décision fiable (forte cohérence IA/Métier)"
+        confidence_note = "[FAST] Note : Décision fiable (forte cohérence IA/Métier)"
 
     lines = []
     # Afficher les 4 plus gros facteurs
@@ -192,7 +197,7 @@ def _build_explanation(level: str, factors: dict, confidence: float, source: str
 
     suffix = ""
     if source == "human_correction":
-        suffix = "\n⚠️ Classification imposée par la bibliothèque d'expertise humaine."
+        suffix = "\n[!] Classification imposée par la bibliothèque d'expertise humaine."
 
     return (
         f"STATUT : {risk_label} ({level})\n"
@@ -208,6 +213,7 @@ class AIService:
     def __init__(self):
         self.model = None
         self.extractor = None
+        self.label_encoder = None
         self.is_loaded = False
         self.model_version = "2.0.0" # Upgrade version
 
@@ -222,11 +228,27 @@ class AIService:
             
             model_path = os.path.join(models_dir, "classifier_model.pkl")
             self.model = joblib.load(model_path)
+            
+            le_path = os.path.join(models_dir, "label_encoder.pkl")
+            if os.path.exists(le_path):
+                self.label_encoder = joblib.load(le_path)
+            else:
+                self.label_encoder = None
+
             self.is_loaded = True
-            print(f"INFO: Modèles IA v{self.model_version} chargés avec succès")
+            print(f"INFO: Modeles IA v{self.model_version} charges avec succes")
+
+            # ── Modèle 2 : Charger l'Isolation Forest ────────────────────────
+            anomaly_service.load_model()
+
+            # ── Moteur de Décision NN : Charger ou pré-entraîner le MLP ──────
+            from app.services.nn_fusion_engine import nn_fusion_engine
+            nn_fusion_engine.load_or_init()
+            # ─────────────────────────────────────────────────────────────────
+
             return True
         except Exception as e:
-            print(f"ERROR: Échec chargement IA : {e}")
+            print(f"ERROR: chec chargement IA : {e}")
             return False
 
     def check_corrections(self, db: Session, ticket_data: dict) -> dict | None:
@@ -243,7 +265,7 @@ class AIService:
             correction = db.query(AICorrection).filter(AICorrection.profile_signature == sig).first()
             if correction:
                 correction.usage_count = (correction.usage_count or 0) + 1
-                correction.last_used_at = datetime.utcnow()
+                correction.last_used_at = datetime.now(timezone.utc)
                 db.flush()
 
                 level = correction.corrected_level
@@ -282,27 +304,36 @@ class AIService:
                 "risk_score_rules": score,
                 "risk_label": RISK_LABEL_VERBOSE.get(rule_level, rule_level),
                 "confidence": 70.0,
-                "confidence_level": "✅ Confiance modérée (Règles métier)",
+                "confidence_level": "[OK] Confiance modérée (Règles métier)",
                 "explanation": _build_explanation(rule_level, factors, 0.7, source="fallback"),
                 "details": factors,
                 "triggered_rules": [f"{desc} ({pts} pts)" for _, (pts, desc) in factors.items()],
                 "decision_source": "RULES_ONLY (Fallback)",
-                "consistency": {"status": "OK", "message": "Mode dégradé active"},
+                "consistency": {"status": "OK", "message": "Mode dgrad active"},
                 "recommended_action": "MANUAL_REVIEW" if rule_level != "BASE" else "AUTO_APPROVE",
                 "source": "fallback",
              }
 
         try:
             features_df  = self.extractor.transform_single_ticket(ticket_data)
-            prediction   = self.model.predict(features_df)[0]
+            prediction_raw   = self.model.predict(features_df)[0]
             probabilities= self.model.predict_proba(features_df)[0]
-            confidence   = round(max(probabilities) * 100, 2)
+            confidence   = float(round(max(probabilities) * 100, 2))
 
             classes   = self.model.classes_.tolist()
+            
+            # Gérer le LabelEncoder pour XGBoost
+            if self.label_encoder is not None:
+                prediction = self.label_encoder.inverse_transform([prediction_raw])[0]
+                classes_str = self.label_encoder.inverse_transform(classes).tolist()
+            else:
+                prediction = prediction_raw
+                classes_str = classes
+
             prob_dict = {
-                "BASE":      round(probabilities[classes.index("BASE")] * 100, 2),
-                "SENSITIVE": round(probabilities[classes.index("SENSITIVE")] * 100, 2),
-                "CRITICAL":  round(probabilities[classes.index("CRITICAL")] * 100, 2),
+                "BASE":      float(round(probabilities[classes_str.index("BASE")] * 100, 2)),
+                "SENSITIVE": float(round(probabilities[classes_str.index("SENSITIVE")] * 100, 2)),
+                "CRITICAL":  float(round(probabilities[classes_str.index("CRITICAL")] * 100, 2)),
             }
 
             # Requirement 1 (v2.0): Vérifier cohérence
@@ -314,11 +345,49 @@ class AIService:
 
             # Requirement 4 & 10 (v2.0): Confidence nuance
             if confidence < 50:
-                warning_label = "⚠ Très faible confiance IA"
+                warning_label = " Trs faible confiance IA"
             elif confidence < 70:
-                warning_label = "⚠ Confiance modérée"
+                warning_label = " Confiance modre"
             else:
-                warning_label = "✅ Confiance élevée"
+                warning_label = "[OK] Confiance leve"
+
+            classification_source = "model"
+
+            # ── V3.0 : SHAP Values Explanation (XGBoost) ──
+            shap_values_dict = {}
+            try:
+                import shap
+                # Initialiser l'explainer sur l'arbre (très rapide pour XGB/RF)
+                explainer = shap.TreeExplainer(self.model)
+                shap_vals = explainer.shap_values(features_df)
+                
+                # shap_values pour classification multiclasses
+                class_index = classes.index(prediction_raw)
+                
+                if isinstance(shap_vals, list):
+                    # Random Forest
+                    local_shap = shap_vals[class_index][0]
+                elif len(shap_vals.shape) == 3:
+                    # XGBoost
+                    local_shap = shap_vals[0, :, class_index]
+                else:
+                    local_shap = shap_vals[0]
+                    
+                feature_names = features_df.columns.tolist()
+                
+                # Ziper et trier par valeur absolue
+                shap_pairs = list(zip(feature_names, local_shap))
+                shap_pairs.sort(key=lambda x: abs(x[1]), reverse=True)
+                
+                # Garder le top 5
+                for f_name, s_val in shap_pairs[:5]:
+                    if abs(s_val) > 0.001:  # Ignorer les bruits insignifiants
+                        shap_values_dict[f_name] = round(float(s_val), 4)
+                        
+            except Exception as e:
+                print(f"INFO: SHAP non calcul ({e})")
+            
+            # ─────────────────────────────────────────────
 
             explanation = _build_explanation(prediction, factors, confidence/100, source="model")
             
@@ -342,11 +411,12 @@ class AIService:
                     "message": consistency_msg
                 },
                 "recommended_action": self._pre_determine_action(prediction, confidence, consistency, score),
+                "shap_values":  shap_values_dict,
                 "source":       "model",
             }
         except Exception as e:
             print(f"ERROR classification: {e}")
-            return { "level": "BASE", "risk_level": "BASE", "risk_score": 0, "confidence": 50.0, "probabilities": {}, "explanation": "Erreur technique IA.", "source": "error", "details": {} }
+            return { "level": "BASE", "risk_level": "BASE", "risk_score": 0, "confidence": 50.0, "probabilities": {}, "explanation": "Erreur technique IA.", "source": "error", "details": {}, "shap_values": {} }
 
     def _pre_determine_action(self, prediction, confidence, consistency, score) -> str:
         """Détermine l'action recommandée selon la matrice de risque pro."""
@@ -366,7 +436,7 @@ class AIService:
         """Point d'entrée principal via objet SQLAlchemy"""
         details  = self._get_details(ticket)
 
-        # ✅ Lire la séniorité RÉELLE depuis la table employees
+        # [OK] Lire la séniorité RÉELLE depuis la table employees
         # Le JSON du ticket peut être absent ou erroné — la DB est la source de vérité
         employee_seniority = details.get("user_seniority", "junior")
         if db is not None and ticket.employee_id:
@@ -390,11 +460,113 @@ class AIService:
             "manager_approval_status": details.get("manager_approval_status", "none"),
         }
 
+        # ── V3.0 : Appels aux nouveaux services (NLP + Trust Score) ──────────
+        
+        # 1. Analyse Sémantique NLP de la justification
+        justification_text = details.get("justification", "")
+        nlp_res = nlp_service.analyze_justification(
+            justification=justification_text,
+            request_reason=ticket_data["request_reason"],
+            role=ticket_data["role"],
+            environment=ticket_data["environment"]
+        )
+        nlp_modifier = nlp_service.score_to_risk_modifier(nlp_res["nlp_score"])
+
+        # 2. Récupération Trust Score employé
+        trust_res = {}
+        trust_modifier = 0
+        if ticket.employee_id and db is not None:
+             trust_res = trust_score_service.compute_trust_score(ticket.employee_id, db)
+             trust_modifier = trust_res.get("risk_modifier", 0)
+
+        # 3. Application des RÈGLES D'AUTOMATISATION DYNAMIQUES (Supervision)
+        dynamic_factors = {}
+        if db is not None:
+            try:
+                active_rules = db.query(AutomationRule).filter(
+                    AutomationRule.equipe == ticket_data["team"],
+                    AutomationRule.actif == True
+                ).all()
+                
+                for rule in active_rules:
+                    # Vérifier si le rôle et l'environnement correspondent
+                    role_match = not rule.roles or any(r.upper() in ticket_data["role"].upper() for r in rule.roles)
+                    env_match = not rule.environnements or any(e.upper() == ticket_data["environment"].upper() for e in rule.environnements)
+                    
+                    if role_match and env_match:
+                        # Vérifier si l'accès demandé est dans les accès par défaut
+                        for acc in rule.acces_par_defaut:
+                            if acc["nom"].upper() in ticket_data["access_type"].upper():
+                                # Match ! On réduit le risque car c'est une règle pré-approuvée
+                                bonus = -30 if acc["niveau"] == "Base" else -15
+                                dynamic_factors["dynamic_rule_" + str(rule.id)] = (bonus, f"Règle d'automatisation : {rule.equipe} - {acc['nom']}")
+            except Exception as e:
+                print(f"WARNING: Erreur lors de l'application des regles dynamiques: {e}")
+
+        # ─────────────────────────────────────────────────────────────────────
+
         if db is not None:
             correction = self.check_corrections(db, ticket_data)
-            if correction: return correction
+            # Si correction experte, on injecte quand-même les stats NLP/Trust
+            if correction:
+                 correction.update({
+                      "nlp_score": nlp_res["nlp_score"],
+                      "nlp_label": nlp_res["nlp_label"],
+                      "trust_score": trust_res.get("trust_score"),
+                      "trust_label": trust_res.get("trust_label"),
+                      "trust_modifier": trust_modifier,
+                 })
+                 return correction
 
-        return self.classify_ticket_data(ticket_data)
+        # Classification de base
+        result = self.classify_ticket_data(ticket_data)
+
+        # ── V3.0 : Application des modificateurs de score et enrichissement ──
+        base_score = result["risk_score_rules"]
+        
+        # Ajouter les facteurs dynamiques
+        for k, v in dynamic_factors.items():
+            result["details"][k] = v
+            base_score += v[0]
+            
+        final_score = base_score + nlp_modifier + trust_modifier
+        final_score = max(0, min(200, final_score)) # Clamp
+        
+        result["risk_score_rules"] = final_score
+        result["risk_score"]       = final_score
+
+        # Mise à jour du niveau heuristique si le modificateur le fait basculer
+        if final_score >= 85 and result["rule_based_level"] != "CRITICAL":
+            result["rule_based_level"] = "CRITICAL"
+            result["consistency"]["status"] = "WARNING" if result["prediction"] != "CRITICAL" else "OK"
+        elif final_score >= 50 and result["rule_based_level"] == "BASE":
+            result["rule_based_level"] = "SENSITIVE"
+            result["consistency"]["status"] = "WARNING" if result["prediction"] != "SENSITIVE" else "OK"
+
+        # Injection des stats dans le résultat final pour l'enregistrement
+        result["nlp_score"]      = nlp_res["nlp_score"]
+        result["nlp_label"]      = nlp_res["nlp_label"]
+        result["trust_score"]    = trust_res.get("trust_score")
+        result["trust_label"]    = trust_res.get("trust_label")
+        result["trust_modifier"] = trust_modifier
+        
+        # Ajout à l'explication visuelle
+        if nlp_modifier != 0:
+             result["details"]["nlp_ana"] = (nlp_modifier, f"[NLP V3] Analyse smantique : {nlp_res['nlp_label']} ({nlp_res['nlp_score']}/100)")
+        if trust_modifier != 0:
+             result["details"]["trust_ana"] = (trust_modifier, f"[TRUST V3] Rputation employ : {trust_res.get('trust_label')} (Score: {trust_res.get('trust_score')})")
+
+        # ── V3.0 : Injection SHAP dans l'explication UX si disponible ──
+        if "shap_values" in result and result["shap_values"]:
+             shap_txt = "\n\n[STATS] Poids des vecteurs M.L (SHAP) :\n"
+             for feat, val in result["shap_values"].items():
+                 shap_txt += f"  - {feat} : {val:+.2f}\n"
+             result["explanation"] += shap_txt
+
+        # Régénérer l'explication avec les nouveaux facteurs
+        # ... (dj fait plus haut, on ajoute juste le texte SHAP ici  result["explanation"])
+        
+        return result
 
     def classify_and_save(self, db: Session, ticket: Ticket) -> dict:
         """Effectue la classification, enregistre en base et applique la décision finale."""
@@ -421,34 +593,99 @@ class AIService:
             recommended_action      = result.get("recommended_action"),
             confidence_level_label  = result.get("confidence_level"),
             
-            processed_at            = datetime.utcnow(),
+            # Nouveaux champs V3.0 (NLP & SHAP)
+            nlp_score               = result.get("nlp_score"),
+            nlp_label               = result.get("nlp_label"),
+            trust_modifier          = result.get("trust_modifier"),
+            shap_values             = result.get("shap_values"),
+
+            processed_at            = datetime.now(timezone.utc),
         )
         db.add(classification)
+
+        # ── MODÈLE 2 : Détection d'Anomalies Comportementales ───────────────
+        anomaly_result = anomaly_service.analyze_ticket(ticket, db)
+
+        # ── MOTEUR NN : Décision Finale (MLP Tri-Polaire) ───────────────────
+        from app.services.nn_fusion_engine import nn_fusion_engine
+        nn_pred = nn_fusion_engine.predict(result, anomaly_result)
+
+        # Compatibilité avec le reste du code (ancien format fusion)
+        fusion = {
+            "final_level":       nn_pred["final_level"],
+            "original_level":    result.get("level", "BASE"),
+            "anomaly_severity":  nn_pred["anomaly_severity"],
+            "anomaly_flags":     anomaly_result.get("flags", []),
+            "is_anomalous":      anomaly_result.get("is_anomalous", False),
+            "anomaly_overridden": nn_pred["final_level"] != result.get("level"),
+            "final_risk_score":  min(200, result.get("risk_score_rules", 0) + nn_pred["risk_boost"]),
+            "anomaly_score":     anomaly_result.get("anomaly_score"),
+            "fusion_explanation": decision_fusion_service.fuse(result, anomaly_result)["fusion_explanation"],
+            "risk_boost":        nn_pred["risk_boost"],
+            # Champs spécifiques NN (pour audit)
+            "nn_probabilities":  nn_pred.get("nn_probabilities", {}),
+            "nn_confidence":     nn_pred.get("nn_confidence", 0.0),
+            "fusion_mode":       nn_pred.get("fusion_mode", "RULE"),
+        }
+
+        # Appliquer le niveau final de la fusion
+        final_level = fusion["final_level"]
+        if final_level != classification.predicted_level:
+            print(f"[FUSION] Override anomalie : {classification.predicted_level} -> {final_level} "
+                  f"(anomalie severite: {fusion['anomaly_severity']})")
+        classification.predicted_level = final_level
+        classification.explanation = fusion["fusion_explanation"]
         
-        # 🔔 ALERTE : Création d'une notification via AuditService
-        predicted = classification.predicted_level
+        # Ajouter les infos NN à l'explication et à la source (pour audit sans changer le schéma DB)
+        classification.decision_source = f"HYBRID (M1 + M2 {fusion['fusion_mode']})"
+        if fusion['fusion_mode'] == 'NN':
+            nn_conf_pct = round(fusion['nn_confidence'] * 100, 1)
+            classification.explanation += f"\n\n[NN] Fusion Tri-Polaire (Rseau de Neurones) : Confiance {nn_conf_pct}%"
+            
+        classification.risk_score_rules = fusion["final_risk_score"]
+        
+        # Injecter le boost anomalie dans les facteurs de risque pour affichage frontend
+        # NOTE: Toujours re-assigner un nouveau dict pour que SQLAlchemy détecte la mutation JSON
+        current_factors = dict(classification.risk_factors or {})
+        if fusion["risk_boost"] > 0:
+            current_factors["ANOMALY_BOOST"] = [fusion["risk_boost"], f"Anomalie comportementale ({fusion['anomaly_severity']})"]
+        # Vérification de cohérence : sum(factors) doit égaler risk_score_rules
+        factors_sum = sum(v[0] for v in current_factors.values())
+        clamped_score = max(0, min(200, factors_sum))
+        classification.risk_score_rules = clamped_score
+        classification.risk_factors = current_factors
+        
+        # Mettre à jour les triggered_rules avec TOUS les modificateurs (NLP, Trust, Anomaly)
+        classification.triggered_rules = [f"{desc} ({'+' if pts > 0 else ''}{pts} pts)" for _, (pts, desc) in current_factors.items()]
+        # ─────────────────────────────────────────────────────────────────────
+
+        # 🔔 ALERTE : Notification basée sur le niveau FINAL (après fusion)
+        predicted = final_level
         if predicted == "CRITICAL":
             audit_service.notify(
                 db=db,
                 title=f"ALERTE: Ticket Critique {ticket.ref}",
-                message=f"Risque élevé détecté sur {ticket.ref} ({ticket.employee_name}). Validation immédiate requise.",
+                message=f"Risque lev dtect sur {ticket.ref} ({ticket.employee_name}). Validation immdiate requise."
+                        + (f" [!] Anomalie comportementale : {fusion['anomaly_severity']}" if fusion["is_anomalous"] else ""),
                 type="danger"
             )
         elif predicted == "SENSITIVE":
             audit_service.notify(
                 db=db,
                 title=f"Alerte: Ticket Sensible {ticket.ref}",
-                message=f"Le ticket {ticket.ref} demande une revue d'accès.",
+                message=f"Le ticket {ticket.ref} demande une revue d'accs."
+                        + (f" [!] Anomalie : {', '.join(fusion['anomaly_flags'][:2])}" if fusion["is_anomalous"] else ""),
                 type="warning"
             )
         else:
             audit_service.notify(
                 db=db,
                 title=f"Info: Nouveau Ticket {ticket.ref}",
-                message=f"Ticket de niveau BASE auto-analysé.",
+                message=f"Ticket de niveau BASE auto-analys.",
                 type="info"
             )
-        print(f"[NOTIF] Notification créée pour le ticket {ticket.ref} ({predicted})")
+        print(f"[NOTIF] Notification creee pour le ticket {ticket.ref} ({predicted})"
+              + (f" | Anomalie: {fusion['anomaly_severity']}" if fusion["is_anomalous"] else ""))
 
         db.flush()
 
@@ -485,7 +722,7 @@ class AIService:
             recommended_action = decision["action"],
             action_reason      = decision["reason"],
             rules_applied      = decision["rules_applied"],
-            processed_at       = datetime.utcnow(),
+            processed_at       = datetime.now(timezone.utc),
         )
         db.add(decision_record)
 
@@ -518,7 +755,7 @@ class AIService:
                 )
                 itop_srv.update_ticket_status(ticket.ref, "approved", "Auto-approbation de niveau BASE par l'IA.")
             except Exception as e:
-                print(f"⚠️ [AUTO-APPROVE] Erreur lors de la création du profil automatisée pour {ticket.ref}: {e}")
+                print(f"[!] [AUTO-APPROVE] Erreur lors de la cration du profil automatise pour {ticket.ref}: {e}")
             # ------------------------------------------------------------------
         elif decision["action"] == "ESCALATE_ADMIN":
             ticket.status = TicketStatus.ASSIGNED
@@ -527,7 +764,7 @@ class AIService:
             ticket.status = TicketStatus.ASSIGNED
             ticket.assigned_to = "SUPER_ADMIN"
 
-        ticket.assigned_at = datetime.utcnow()
+        ticket.assigned_at = datetime.now(timezone.utc)
         db.commit()
 
         return { "classification": result, "decision": decision }
@@ -552,7 +789,7 @@ class AIService:
         if consistency == "WARNING":
             return {
                 "action": "ESCALATE_SUPER_ADMIN",
-                "reason": f"Alerte de cohérence: Désaccord ML/Métier ({result['consistency']['message']})",
+                "reason": f"Alerte de cohrence: Dsaccord ML/Mtier ({result['consistency']['message']})",
                 "rules_applied": ["consistency_warning_escalation"]
             }
 

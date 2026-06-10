@@ -37,6 +37,15 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.metrics import classification_report, accuracy_score
+from sklearn.preprocessing import LabelEncoder
+
+try:
+    from xgboost import XGBClassifier
+    USE_XGBOOST = True
+    print("[RETRAIN] ✅ XGBoost disponible — Modèle V3.0")
+except ImportError:
+    USE_XGBOOST = False
+    print("[RETRAIN] ⚠️  XGBoost non installé — Fallback Random Forest")
 
 from app.database import SessionLocal
 from app.models.ticket import Ticket, TicketStatus
@@ -192,10 +201,14 @@ print("\n[WORK] Préparation des features...")
 extractor = FeatureExtractor()
 extractor.fit(df_combined)
 X = extractor.transform(df_combined)
-y = df_combined["label"]
+y_str = df_combined["label"]
+
+# ── Encodage numérique des labels (requis par XGBoost) ───────────────────────
+le_label = LabelEncoder()
+y = le_label.fit_transform(y_str)
 
 print(f"[STATS] Features : {X.shape[1]} colonnes")
-print(f"[STATS] Labels   : {y.value_counts().to_dict()}")
+print(f"[STATS] Labels   : {dict(zip(le_label.classes_, [int((y == i).sum()) for i in range(len(le_label.classes_))]))}") 
 
 # ==================== 5. ENTRAÎNEMENT ====================
 
@@ -203,14 +216,32 @@ X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=0.2, random_state=42, stratify=y
 )
 
-print(f"\n[TRAIN] Entraînement Random Forest sur {len(X_train)} tickets...")
-model = RandomForestClassifier(
-    n_estimators=150,
-    max_depth=12,
-    random_state=42,
-    class_weight="balanced",
-)
+if USE_XGBOOST:
+    print(f"\n[TRAIN] 🚀 Entraînement XGBoost V3.0 sur {len(X_train)} tickets...")
+    model = XGBClassifier(
+        n_estimators=200,
+        learning_rate=0.08,
+        max_depth=6,
+        subsample=0.8,
+        colsample_bytree=0.8,
+        eval_metric="mlogloss",
+        num_class=len(le_label.classes_),
+        random_state=42,
+        verbosity=0,
+    )
+    model_name = "XGBoost V3.0"
+else:
+    print(f"\n[TRAIN] Entraînement Random Forest (Fallback) sur {len(X_train)} tickets...")
+    model = RandomForestClassifier(
+        n_estimators=150, max_depth=12, random_state=42, class_weight="balanced"
+    )
+    model_name = "RandomForest (Fallback)"
+
 model.fit(X_train, y_train)
+
+# Sauvegarder le label encoder avec l'extracteur
+joblib.dump(le_label, os.path.join(MODEL_DIR, "label_encoder.pkl"))
+print(f"[SAVE] LabelEncoder sauvegardé")
 
 # ==================== 6. ÉVALUATION ====================
 
@@ -218,10 +249,13 @@ y_pred  = model.predict(X_test)
 accuracy = accuracy_score(y_test, y_pred)
 cv_scores = cross_val_score(model, X, y, cv=5)
 
+y_pred_str = le_label.inverse_transform(y_pred)
+y_test_str = le_label.inverse_transform(y_test)
+
 print(f"\n[SCORE] Accuracy : {accuracy:.2%}")
 print(f"[STATS] CV Moyenne : {cv_scores.mean():.2%}  (±{cv_scores.std():.2%})")
 print("\n[REPORT] Classification Report :")
-print(classification_report(y_test, y_pred))
+print(classification_report(y_test_str, y_pred_str))
 
 # ==================== 7. SAUVEGARDE ====================
 
@@ -244,12 +278,14 @@ if os.path.exists(HIST_PATH):
 
 history.append({
     "date":             datetime.utcnow().isoformat(),
+    "model_name":       model_name,
     "total_tickets":    len(df_combined),
-    "human_tickets":    len(df_human),
+    "human_tickets":    len(df_human) if not df_human.empty else 0,
     "accuracy":         round(accuracy, 4),
     "cv_mean":          round(float(cv_scores.mean()), 4),
     "cv_std":           round(float(cv_scores.std()), 4),
-    "label_distribution": y.value_counts().to_dict(),
+    "label_distribution": dict(zip(le_label.classes_, [int((y == i).sum()) for i in range(len(le_label.classes_))])),
+    "trigger":          "active_learning",
 })
 
 with open(HIST_PATH, "w", encoding="utf-8") as f:

@@ -1,6 +1,4 @@
-# app/api/endpoints/feedback.py
-
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
@@ -12,6 +10,10 @@ from app.models.user import DashboardUser
 from app.models.ai_feedback import AIFeedback, AICorrection, compute_profile_signature
 from app.models.classification_result import ClassificationResult
 from app.models.ticket import Ticket
+from app.tasks.auto_retrain_task import (
+    increment_dislike_counter, should_retrain,
+    run_retrain_background, get_counter_status
+)
 
 router = APIRouter(prefix="/feedback", tags=["Feedback IA"])
 
@@ -35,6 +37,7 @@ class FeedbackRequest(BaseModel):
 async def submit_feedback(
     ticket_id: int,
     body: FeedbackRequest,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: DashboardUser = Depends(get_current_user),
 ):
@@ -142,11 +145,47 @@ async def submit_feedback(
 
     db.commit()
 
+    # ── V3.0 : Active Learning — Déclenchement auto-retrain après 10 dislikes ──────
+    auto_retrain_triggered = False
+    if vote == "dislike" and body.corrected_level:
+        # 1. NN Fusion Online Learning (Apprend en temps réel)
+        if classification:
+            try:
+                from app.services.nn_fusion_engine import nn_fusion_engine
+                anomaly = ticket.anomaly_logs[0] if hasattr(ticket, "anomaly_logs") and ticket.anomaly_logs else None
+                
+                m1_res = {
+                    "level": classification.predicted_level,
+                    "probabilities": classification.probabilities,
+                    "risk_score_rules": classification.risk_score_rules,
+                    "nlp_score": classification.nlp_score,
+                    "trust_score": classification.trust_modifier, # Approx, but valid enough for online update
+                }
+                m2_res = {
+                    "is_anomalous": anomaly.is_anomalous if anomaly else False,
+                    "severity": anomaly.severity if anomaly else "NONE",
+                    "anomaly_score": anomaly.anomaly_score if anomaly else None,
+                    "risk_boost": anomaly.risk_boost if anomaly else 0,
+                }
+                nn_fusion_engine.learn_from_expert(m1_res, m2_res, body.corrected_level)
+            except Exception as e:
+                print(f"WARNING: NN online learning failed: {e}")
+
+        # 2. XGBoost Batch Retrain (Tous les 10 dislikes)
+        count = increment_dislike_counter()
+        print(f"📍 [ACTIVE LEARNING] Corrections accumulées : {count}/{10}")
+        if should_retrain():
+            auto_retrain_triggered = True
+            background_tasks.add_task(run_retrain_background, db=None)  # db=None pour éviter conflit session
+            print("🤖 [ACTIVE LEARNING] Rétro-entraînement XGBoost déclenché en arrière-plan !")
+
     return {
         "message": "Feedback enregistré avec succès",
         "ticket_id": ticket_id,
         "vote": vote,
         "correction_propagated": (vote == "dislike" and bool(body.corrected_reason)) or vote == "like",
+        "auto_retrain_triggered": auto_retrain_triggered,
+        "active_learning_status": get_counter_status(),
     }
 
 

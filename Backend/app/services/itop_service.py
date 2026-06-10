@@ -90,11 +90,11 @@ class ITopService:
                 data = response.json()
                 return self._parse_itop_response(data)
             else:
-                print(f"❌ iTop API error: {response.status_code}")
+                print(f"[X] iTop API error: {response.status_code}")
                 return []
                 
         except Exception as e:
-            print(f"❌ Erreur iTop: {e}")
+            print(f"[X] Erreur iTop: {e}")
             return []
     
     def _parse_itop_response(self, data: Dict) -> List[Dict]:
@@ -127,8 +127,8 @@ class ITopService:
         En production : appel API JSON-RPC.
         """
         if self.mode == "development":
-            status_icon = "✅" if status == "approved" else "❌"
-            print(f"{status_icon} [iTop SIMULATION] Ticket {ticket_ref} → statut '{status.upper()}' (résolution: {resolution[:80] if resolution else 'N/A'})")
+            status_icon = "[OK]" if status == "approved" else "[X]"
+            print(f"{status_icon} [iTop SIMULATION] Ticket {ticket_ref}  statut '{status.upper()}' (rsolution: {resolution[:80] if resolution else 'N/A'})")
             return True
         else:
             return self._update_ticket_real(ticket_ref, status, resolution)
@@ -154,7 +154,7 @@ class ITopService:
         """
         # Note: cette méthode délègue au profile_service qui gère l'envoi
         # Elle est conservée pour compatibilité et log ITSM
-        print(f"📧 [iTop] Notification d'approbation envoyée pour {ticket.ref} → {ticket.employee_email}")
+        print(f" [iTop] Notification d'approbation envoye pour {ticket.ref}  {ticket.employee_email}")
         return True
 
     def notify_ticket_rejected(
@@ -167,7 +167,7 @@ class ITopService:
         Simule la notification iTop de rejet.
         Délègue l'envoi réel à profile_service.notify_rejection().
         """
-        print(f"📧 [iTop] Notification de rejet envoyée pour {ticket.ref} → {ticket.employee_email}")
+        print(f" [iTop] Notification de rejet envoye pour {ticket.ref}  {ticket.employee_email}")
         return True
 
     def _update_ticket_real(self, ticket_ref: str, status: str, resolution: str) -> bool:
@@ -197,5 +197,5 @@ class ITopService:
             )
             return response.status_code == 200
         except Exception as e:
-            print(f"❌ Erreur mise à jour iTop: {e}")
+            print(f"[X] Erreur mise  jour iTop: {e}")
             return False

@@ -1,0 +1,1454 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+
+<meta charset="UTF-8">
+
+<title>
+    Bandit Report
+</title>
+
+<style>
+
+html * {
+    font-family: "Arial", sans-serif;
+}
+
+pre {
+    font-family: "Monaco", monospace;
+}
+
+.bordered-box {
+    border: 1px solid black;
+    padding-top:.5em;
+    padding-bottom:.5em;
+    padding-left:1em;
+}
+
+.metrics-box {
+    font-size: 1.1em;
+    line-height: 130%;
+}
+
+.metrics-title {
+    font-size: 1.5em;
+    font-weight: 500;
+    margin-bottom: .25em;
+}
+
+.issue-description {
+    font-size: 1.3em;
+    font-weight: 500;
+}
+
+.candidate-issues {
+    margin-left: 2em;
+    border-left: solid 1px; LightGray;
+    padding-left: 5%;
+    margin-top: .2em;
+    margin-bottom: .2em;
+}
+
+.issue-block {
+    border: 1px solid LightGray;
+    padding-left: .5em;
+    padding-top: .5em;
+    padding-bottom: .5em;
+    margin-bottom: .5em;
+}
+
+.issue-sev-high {
+    background-color: Pink;
+}
+
+.issue-sev-medium {
+    background-color: NavajoWhite;
+}
+
+.issue-sev-low {
+    background-color: LightCyan;
+}
+
+</style>
+</head>
+
+<body>
+
+<div id="metrics">
+    <div class="metrics-box bordered-box">
+        <div class="metrics-title">
+            Metrics:<br>
+        </div>
+        Total lines of code: <span id="loc">6447</span><br>
+        Total lines skipped (#nosec): <span id="nosec">0</span>
+    </div>
+</div>
+
+
+
+
+<br>
+<div id="results">
+    
+<div id="issue-0">
+<div class="issue-block issue-sev-low">
+    <b>blacklist: </b> Consider possible security implications associated with the subprocess module.<br>
+    <b>Test ID:</b> B404<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/78.html" target="_blank">CWE-78</a><br>
+    <b>File: </b><a href="app/api\endpoints\ai.py" target="_blank">app/api\endpoints\ai.py</a><br>
+    <b>Line number: </b>243<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_imports.html#b404-import-subprocess" target="_blank">https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_imports.html#b404-import-subprocess</a><br>
+
+<div class="code">
+<pre>
+242	
+243	    import subprocess
+244	    import sys
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-1">
+<div class="issue-block issue-sev-low">
+    <b>subprocess_without_shell_equals_true: </b> subprocess call - check for execution of untrusted input.<br>
+    <b>Test ID:</b> B603<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/78.html" target="_blank">CWE-78</a><br>
+    <b>File: </b><a href="app/api\endpoints\ai.py" target="_blank">app/api\endpoints\ai.py</a><br>
+    <b>Line number: </b>256<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/plugins/b603_subprocess_without_shell_equals_true.html" target="_blank">https://bandit.readthedocs.io/en/1.9.4/plugins/b603_subprocess_without_shell_equals_true.html</a><br>
+
+<div class="code">
+<pre>
+255	    try:
+256	        result = subprocess.run(
+257	            [sys.executable, script],
+258	            capture_output=True, text=True, timeout=300,
+259	            cwd=os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+260	        )
+261	        if result.returncode != 0:
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-2">
+<div class="issue-block issue-sev-low">
+    <b>blacklist: </b> Standard pseudo-random generators are not suitable for security/cryptographic purposes.<br>
+    <b>Test ID:</b> B311<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/330.html" target="_blank">CWE-330</a><br>
+    <b>File: </b><a href="app/api\endpoints\auth.py" target="_blank">app/api\endpoints\auth.py</a><br>
+    <b>Line number: </b>26<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random" target="_blank">https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random</a><br>
+
+<div class="code">
+<pre>
+25	def generate_otp():
+26	    return &#x27;&#x27;.join(random.choices(string.digits, k=6))
+27	
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-3">
+<div class="issue-block issue-sev-low">
+    <b>hardcoded_password_string: </b> Possible hardcoded password: 'bearer'<br>
+    <b>Test ID:</b> B105<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>MEDIUM<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/259.html" target="_blank">CWE-259</a><br>
+    <b>File: </b><a href="app/api\endpoints\auth.py" target="_blank">app/api\endpoints\auth.py</a><br>
+    <b>Line number: </b>101<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html" target="_blank">https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html</a><br>
+
+<div class="code">
+<pre>
+100	        &quot;access_token&quot;: access_token,
+101	        &quot;token_type&quot;: &quot;bearer&quot;,
+102	        &quot;expires_in&quot;: 15 * 60
+103	    }
+104	
+105	
+106	@router.post(&quot;/refresh&quot;)
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-4">
+<div class="issue-block issue-sev-low">
+    <b>hardcoded_password_funcarg: </b> Possible hardcoded password: 'refresh'<br>
+    <b>Test ID:</b> B106<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>MEDIUM<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/259.html" target="_blank">CWE-259</a><br>
+    <b>File: </b><a href="app/api\endpoints\auth.py" target="_blank">app/api\endpoints\auth.py</a><br>
+    <b>Line number: </b>119<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/plugins/b106_hardcoded_password_funcarg.html" target="_blank">https://bandit.readthedocs.io/en/1.9.4/plugins/b106_hardcoded_password_funcarg.html</a><br>
+
+<div class="code">
+<pre>
+118	    
+119	    payload = verify_token(refresh_token_cookie, token_type=&quot;refresh&quot;)
+120	    if not payload:
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-5">
+<div class="issue-block issue-sev-low">
+    <b>hardcoded_password_string: </b> Possible hardcoded password: 'bearer'<br>
+    <b>Test ID:</b> B105<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>MEDIUM<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/259.html" target="_blank">CWE-259</a><br>
+    <b>File: </b><a href="app/api\endpoints\auth.py" target="_blank">app/api\endpoints\auth.py</a><br>
+    <b>Line number: </b>138<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html" target="_blank">https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html</a><br>
+
+<div class="code">
+<pre>
+137	        &quot;access_token&quot;: new_access_token,
+138	        &quot;token_type&quot;: &quot;bearer&quot;,
+139	        &quot;expires_in&quot;: 15 * 60
+140	    }
+141	
+142	
+143	@router.post(&quot;/register&quot;)
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-6">
+<div class="issue-block issue-sev-low">
+    <b>hardcoded_password_string: </b> Possible hardcoded password: '***hidden***'<br>
+    <b>Test ID:</b> B105<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>MEDIUM<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/259.html" target="_blank">CWE-259</a><br>
+    <b>File: </b><a href="app/api\endpoints\profiles.py" target="_blank">app/api\endpoints\profiles.py</a><br>
+    <b>Line number: </b>29<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html" target="_blank">https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html</a><br>
+
+<div class="code">
+<pre>
+28	        # Le mot de passe en clair n&#x27;est JAMAIS renvoyé par l&#x27;API
+29	        &quot;password_hash&quot;:   &quot;***hidden***&quot;,
+30	        &quot;temp_password_cleared&quot;: p.temp_password_cleared,
+31	        &quot;application&quot;:     p.application,
+32	        &quot;environments&quot;:    p.environments  or [],
+33	        &quot;access_types&quot;:    p.access_types  or [],
+34	        &quot;resource&quot;:        p.resource,
+35	        &quot;status&quot;:          p.status.value,
+36	        &quot;created_by&quot;:      p.created_by,
+37	        &quot;revoked_by&quot;:      p.revoked_by,
+38	        &quot;revoked_reason&quot;:  p.revoked_reason,
+39	        &quot;created_at&quot;:      p.created_at.isoformat()  if p.created_at  else None,
+40	        &quot;revoked_at&quot;:      p.revoked_at.isoformat()  if p.revoked_at  else None,
+41	        &quot;expires_at&quot;:      p.expires_at.isoformat()  if p.expires_at  else None,
+42	        &quot;notification_sent&quot;:     p.notification_sent,
+43	        &quot;notification_sent_at&quot;:  p.notification_sent_at.isoformat() if p.notification_sent_at else None,
+44	        # Infos de l&#x27;employé dénormalisées depuis la relation ticket
+45	        &quot;employee_name&quot;:   p.ticket.employee_name   if p.ticket else None,
+46	        &quot;employee_email&quot;:  p.ticket.employee_email  if p.ticket else None,
+47	        &quot;team_name&quot;:       p.ticket.team_name       if p.ticket else None,
+48	        &quot;ticket_ref&quot;:      p.ticket.ref             if p.ticket else None,
+49	    }
+50	
+51	
+52	@router.get(&quot;&quot;, response_model=None)
+53	def list_profiles(
+54	    status: Optional[str] = Query(None, description=&quot;ACTIVE | REVOKED | EXPIRED&quot;),
+55	    application: Optional[str] = Query(None),
+56	    skip: int = Query(0, ge=0),
+57	    limit: int = Query(100, ge=1, le=500),
+58	    db: Session = Depends(get_db),
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-7">
+<div class="issue-block issue-sev-low">
+    <b>hardcoded_password_string: </b> Possible hardcoded password: 'access'<br>
+    <b>Test ID:</b> B105<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>MEDIUM<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/259.html" target="_blank">CWE-259</a><br>
+    <b>File: </b><a href="app/core\dependencies.py" target="_blank">app/core\dependencies.py</a><br>
+    <b>Line number: </b>36<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html" target="_blank">https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html</a><br>
+
+<div class="code">
+<pre>
+35	        # Vérifier que c&#x27;est bien un access token (pas un refresh token)
+36	        if token_type != &quot;access&quot;:
+37	            raise credentials_exception
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-8">
+<div class="issue-block issue-sev-low">
+    <b>hardcoded_password_default: </b> Possible hardcoded password: 'access'<br>
+    <b>Test ID:</b> B107<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>MEDIUM<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/259.html" target="_blank">CWE-259</a><br>
+    <b>File: </b><a href="app/core\security.py" target="_blank">app/core\security.py</a><br>
+    <b>Line number: </b>75<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/plugins/b107_hardcoded_password_default.html" target="_blank">https://bandit.readthedocs.io/en/1.9.4/plugins/b107_hardcoded_password_default.html</a><br>
+
+<div class="code">
+<pre>
+74	
+75	def verify_token(token: str, token_type: str = &quot;access&quot;) -&gt; Optional[dict]:
+76	    &quot;&quot;&quot;Vérifie un token et son type&quot;&quot;&quot;
+77	    payload = decode_token(token)
+78	    if payload and payload.get(&quot;type&quot;) == token_type:
+79	        return payload
+80	    return None
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-9">
+<div class="issue-block issue-sev-high">
+    <b>hashlib: </b> Use of weak MD5 hash for security. Consider usedforsecurity=False<br>
+    <b>Test ID:</b> B324<br>
+    <b>Severity: </b>HIGH<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/327.html" target="_blank">CWE-327</a><br>
+    <b>File: </b><a href="app/models\ai_feedback.py" target="_blank">app/models\ai_feedback.py</a><br>
+    <b>Line number: </b>16<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/plugins/b324_hashlib.html" target="_blank">https://bandit.readthedocs.io/en/1.9.4/plugins/b324_hashlib.html</a><br>
+
+<div class="code">
+<pre>
+15	    raw = f&quot;{application.upper()}|{environment.upper()}|{access_type.upper()}|{team.upper()}|{resource.upper()}&quot;
+16	    return hashlib.md5(raw.encode()).hexdigest()
+17	
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-10">
+<div class="issue-block issue-sev-low">
+    <b>hardcoded_password_string: </b> Possible hardcoded password: 'None'<br>
+    <b>Test ID:</b> B105<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>MEDIUM<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/259.html" target="_blank">CWE-259</a><br>
+    <b>File: </b><a href="app/repositories\user_repository.py" target="_blank">app/repositories\user_repository.py</a><br>
+    <b>Line number: </b>50<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html" target="_blank">https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html</a><br>
+
+<div class="code">
+<pre>
+49	        return self.update(user_id, {
+50	            &quot;refresh_token&quot;: None,
+51	            &quot;refresh_token_created_at&quot;: None
+52	        })
+53	
+54	    def get_by_role(self, role: Role) -&gt; List[DashboardUser]:
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-11">
+<div class="issue-block issue-sev-low">
+    <b>hardcoded_password_string: </b> Possible hardcoded password: 'None'<br>
+    <b>Test ID:</b> B105<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>MEDIUM<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/259.html" target="_blank">CWE-259</a><br>
+    <b>File: </b><a href="app/repositories\user_repository.py" target="_blank">app/repositories\user_repository.py</a><br>
+    <b>Line number: </b>51<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html" target="_blank">https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html</a><br>
+
+<div class="code">
+<pre>
+50	            &quot;refresh_token&quot;: None,
+51	            &quot;refresh_token_created_at&quot;: None
+52	        })
+53	
+54	    def get_by_role(self, role: Role) -&gt; List[DashboardUser]:
+55	        return self.db.query(DashboardUser).filter(DashboardUser.role == role).all()
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-12">
+<div class="issue-block issue-sev-medium">
+    <b>request_without_timeout: </b> Call to requests without timeout<br>
+    <b>Test ID:</b> B113<br>
+    <b>Severity: </b>MEDIUM<br>
+    <b>Confidence: </b>LOW<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/400.html" target="_blank">CWE-400</a><br>
+    <b>File: </b><a href="app/scripts\create_test_tickets.py" target="_blank">app/scripts\create_test_tickets.py</a><br>
+    <b>Line number: </b>10<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/plugins/b113_request_without_timeout.html" target="_blank">https://bandit.readthedocs.io/en/1.9.4/plugins/b113_request_without_timeout.html</a><br>
+
+<div class="code">
+<pre>
+9	    &quot;&quot;&quot;Se connecter pour obtenir le token&quot;&quot;&quot;
+10	    response = requests.post(
+11	        f&quot;{API_URL}/auth/login&quot;,
+12	        json={&quot;username&quot;: &quot;superadmin&quot;, &quot;password&quot;: &quot;superadmin&quot;}
+13	    )
+14	    if response.status_code == 200:
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-13">
+<div class="issue-block issue-sev-low">
+    <b>hardcoded_password_string: </b> Possible hardcoded password: 'superadmin'<br>
+    <b>Test ID:</b> B105<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>MEDIUM<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/259.html" target="_blank">CWE-259</a><br>
+    <b>File: </b><a href="app/scripts\create_test_tickets.py" target="_blank">app/scripts\create_test_tickets.py</a><br>
+    <b>Line number: </b>12<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html" target="_blank">https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html</a><br>
+
+<div class="code">
+<pre>
+11	        f&quot;{API_URL}/auth/login&quot;,
+12	        json={&quot;username&quot;: &quot;superadmin&quot;, &quot;password&quot;: &quot;superadmin&quot;}
+13	    )
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-14">
+<div class="issue-block issue-sev-medium">
+    <b>request_without_timeout: </b> Call to requests without timeout<br>
+    <b>Test ID:</b> B113<br>
+    <b>Severity: </b>MEDIUM<br>
+    <b>Confidence: </b>LOW<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/400.html" target="_blank">CWE-400</a><br>
+    <b>File: </b><a href="app/scripts\create_test_tickets.py" target="_blank">app/scripts\create_test_tickets.py</a><br>
+    <b>Line number: </b>23<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/plugins/b113_request_without_timeout.html" target="_blank">https://bandit.readthedocs.io/en/1.9.4/plugins/b113_request_without_timeout.html</a><br>
+
+<div class="code">
+<pre>
+22	    headers = {&quot;Authorization&quot;: f&quot;Bearer {token}&quot;}
+23	    response = requests.post(
+24	        f&quot;{API_URL}/tickets/simulate/create&quot;,
+25	        headers=headers,
+26	        json=ticket_data
+27	    )
+28	    return response
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-15">
+<div class="issue-block issue-sev-low">
+    <b>blacklist: </b> Standard pseudo-random generators are not suitable for security/cryptographic purposes.<br>
+    <b>Test ID:</b> B311<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/330.html" target="_blank">CWE-330</a><br>
+    <b>File: </b><a href="app/services\itop_service.py" target="_blank">app/services\itop_service.py</a><br>
+    <b>Line number: </b>56<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random" target="_blank">https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random</a><br>
+
+<div class="code">
+<pre>
+55	                &quot;caller_email&quot;: f&quot;employe{i}@biat-it.com.tn&quot;,
+56	                &quot;team&quot;: random.choice(teams),
+57	                &quot;title&quot;: f&quot;Demande d&#x27;accès {random.choice(access_types)}&quot;,
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-16">
+<div class="issue-block issue-sev-low">
+    <b>blacklist: </b> Standard pseudo-random generators are not suitable for security/cryptographic purposes.<br>
+    <b>Test ID:</b> B311<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/330.html" target="_blank">CWE-330</a><br>
+    <b>File: </b><a href="app/services\itop_service.py" target="_blank">app/services\itop_service.py</a><br>
+    <b>Line number: </b>57<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random" target="_blank">https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random</a><br>
+
+<div class="code">
+<pre>
+56	                &quot;team&quot;: random.choice(teams),
+57	                &quot;title&quot;: f&quot;Demande d&#x27;accès {random.choice(access_types)}&quot;,
+58	                &quot;description&quot;: f&quot;Demande d&#x27;accès en {random.choice(access_types)} pour le projet PFE&quot;,
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-17">
+<div class="issue-block issue-sev-low">
+    <b>blacklist: </b> Standard pseudo-random generators are not suitable for security/cryptographic purposes.<br>
+    <b>Test ID:</b> B311<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/330.html" target="_blank">CWE-330</a><br>
+    <b>File: </b><a href="app/services\itop_service.py" target="_blank">app/services\itop_service.py</a><br>
+    <b>Line number: </b>58<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random" target="_blank">https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random</a><br>
+
+<div class="code">
+<pre>
+57	                &quot;title&quot;: f&quot;Demande d&#x27;accès {random.choice(access_types)}&quot;,
+58	                &quot;description&quot;: f&quot;Demande d&#x27;accès en {random.choice(access_types)} pour le projet PFE&quot;,
+59	                &quot;requested_env&quot;: random.sample(envs, random.randint(1, 2)),
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-18">
+<div class="issue-block issue-sev-low">
+    <b>blacklist: </b> Standard pseudo-random generators are not suitable for security/cryptographic purposes.<br>
+    <b>Test ID:</b> B311<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/330.html" target="_blank">CWE-330</a><br>
+    <b>File: </b><a href="app/services\itop_service.py" target="_blank">app/services\itop_service.py</a><br>
+    <b>Line number: </b>59<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random" target="_blank">https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random</a><br>
+
+<div class="code">
+<pre>
+58	                &quot;description&quot;: f&quot;Demande d&#x27;accès en {random.choice(access_types)} pour le projet PFE&quot;,
+59	                &quot;requested_env&quot;: random.sample(envs, random.randint(1, 2)),
+60	                &quot;requested_access&quot;: random.sample(access_types, random.randint(1, 2)),
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-19">
+<div class="issue-block issue-sev-low">
+    <b>blacklist: </b> Standard pseudo-random generators are not suitable for security/cryptographic purposes.<br>
+    <b>Test ID:</b> B311<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/330.html" target="_blank">CWE-330</a><br>
+    <b>File: </b><a href="app/services\itop_service.py" target="_blank">app/services\itop_service.py</a><br>
+    <b>Line number: </b>59<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random" target="_blank">https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random</a><br>
+
+<div class="code">
+<pre>
+58	                &quot;description&quot;: f&quot;Demande d&#x27;accès en {random.choice(access_types)} pour le projet PFE&quot;,
+59	                &quot;requested_env&quot;: random.sample(envs, random.randint(1, 2)),
+60	                &quot;requested_access&quot;: random.sample(access_types, random.randint(1, 2)),
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-20">
+<div class="issue-block issue-sev-low">
+    <b>blacklist: </b> Standard pseudo-random generators are not suitable for security/cryptographic purposes.<br>
+    <b>Test ID:</b> B311<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/330.html" target="_blank">CWE-330</a><br>
+    <b>File: </b><a href="app/services\itop_service.py" target="_blank">app/services\itop_service.py</a><br>
+    <b>Line number: </b>60<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random" target="_blank">https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random</a><br>
+
+<div class="code">
+<pre>
+59	                &quot;requested_env&quot;: random.sample(envs, random.randint(1, 2)),
+60	                &quot;requested_access&quot;: random.sample(access_types, random.randint(1, 2)),
+61	                &quot;status&quot;: &quot;new&quot;,
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-21">
+<div class="issue-block issue-sev-low">
+    <b>blacklist: </b> Standard pseudo-random generators are not suitable for security/cryptographic purposes.<br>
+    <b>Test ID:</b> B311<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/330.html" target="_blank">CWE-330</a><br>
+    <b>File: </b><a href="app/services\itop_service.py" target="_blank">app/services\itop_service.py</a><br>
+    <b>Line number: </b>60<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random" target="_blank">https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random</a><br>
+
+<div class="code">
+<pre>
+59	                &quot;requested_env&quot;: random.sample(envs, random.randint(1, 2)),
+60	                &quot;requested_access&quot;: random.sample(access_types, random.randint(1, 2)),
+61	                &quot;status&quot;: &quot;new&quot;,
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-22">
+<div class="issue-block issue-sev-low">
+    <b>blacklist: </b> Standard pseudo-random generators are not suitable for security/cryptographic purposes.<br>
+    <b>Test ID:</b> B311<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/330.html" target="_blank">CWE-330</a><br>
+    <b>File: </b><a href="app/services\ticket_service.py" target="_blank">app/services\ticket_service.py</a><br>
+    <b>Line number: </b>274<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random" target="_blank">https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random</a><br>
+
+<div class="code">
+<pre>
+273	        if employees:
+274	            emp           = random.choice(employees)
+275	            random_name   = emp.name
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-23">
+<div class="issue-block issue-sev-low">
+    <b>blacklist: </b> Standard pseudo-random generators are not suitable for security/cryptographic purposes.<br>
+    <b>Test ID:</b> B311<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/330.html" target="_blank">CWE-330</a><br>
+    <b>File: </b><a href="app/services\ticket_service.py" target="_blank">app/services\ticket_service.py</a><br>
+    <b>Line number: </b>277<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random" target="_blank">https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random</a><br>
+
+<div class="code">
+<pre>
+276	            random_team   = emp.team
+277	            random_role   = emp.role or random.choice(BANKING_ROLES_PER_TEAM.get(emp.team, [&quot;DEVELOPPEUR&quot;]))
+278	            employee_email = emp.email
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-24">
+<div class="issue-block issue-sev-low">
+    <b>blacklist: </b> Standard pseudo-random generators are not suitable for security/cryptographic purposes.<br>
+    <b>Test ID:</b> B311<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/330.html" target="_blank">CWE-330</a><br>
+    <b>File: </b><a href="app/services\ticket_service.py" target="_blank">app/services\ticket_service.py</a><br>
+    <b>Line number: </b>280<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random" target="_blank">https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random</a><br>
+
+<div class="code">
+<pre>
+279	            employee_id   = emp.id
+280	            user_seniority = emp.seniority or random.choice([&quot;junior&quot;, &quot;senior&quot;])
+281	        else:
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-25">
+<div class="issue-block issue-sev-low">
+    <b>blacklist: </b> Standard pseudo-random generators are not suitable for security/cryptographic purposes.<br>
+    <b>Test ID:</b> B311<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/330.html" target="_blank">CWE-330</a><br>
+    <b>File: </b><a href="app/services\ticket_service.py" target="_blank">app/services\ticket_service.py</a><br>
+    <b>Line number: </b>284<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random" target="_blank">https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random</a><br>
+
+<div class="code">
+<pre>
+283	            last_names    = [&quot;Ben Guiza&quot;, &quot;Ben Ali&quot;, &quot;Haddad&quot;, &quot;Khelil&quot;, &quot;Trabelsi&quot;, &quot;Gharbi&quot;]
+284	            random_name   = f&quot;{random.choice(first_names)} {random.choice(last_names)}&quot;
+285	            random_team   = random.choice(list(BANKING_ROLES_PER_TEAM.keys()))
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-26">
+<div class="issue-block issue-sev-low">
+    <b>blacklist: </b> Standard pseudo-random generators are not suitable for security/cryptographic purposes.<br>
+    <b>Test ID:</b> B311<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/330.html" target="_blank">CWE-330</a><br>
+    <b>File: </b><a href="app/services\ticket_service.py" target="_blank">app/services\ticket_service.py</a><br>
+    <b>Line number: </b>284<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random" target="_blank">https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random</a><br>
+
+<div class="code">
+<pre>
+283	            last_names    = [&quot;Ben Guiza&quot;, &quot;Ben Ali&quot;, &quot;Haddad&quot;, &quot;Khelil&quot;, &quot;Trabelsi&quot;, &quot;Gharbi&quot;]
+284	            random_name   = f&quot;{random.choice(first_names)} {random.choice(last_names)}&quot;
+285	            random_team   = random.choice(list(BANKING_ROLES_PER_TEAM.keys()))
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-27">
+<div class="issue-block issue-sev-low">
+    <b>blacklist: </b> Standard pseudo-random generators are not suitable for security/cryptographic purposes.<br>
+    <b>Test ID:</b> B311<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/330.html" target="_blank">CWE-330</a><br>
+    <b>File: </b><a href="app/services\ticket_service.py" target="_blank">app/services\ticket_service.py</a><br>
+    <b>Line number: </b>285<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random" target="_blank">https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random</a><br>
+
+<div class="code">
+<pre>
+284	            random_name   = f&quot;{random.choice(first_names)} {random.choice(last_names)}&quot;
+285	            random_team   = random.choice(list(BANKING_ROLES_PER_TEAM.keys()))
+286	            random_role   = random.choice(BANKING_ROLES_PER_TEAM[random_team])
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-28">
+<div class="issue-block issue-sev-low">
+    <b>blacklist: </b> Standard pseudo-random generators are not suitable for security/cryptographic purposes.<br>
+    <b>Test ID:</b> B311<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/330.html" target="_blank">CWE-330</a><br>
+    <b>File: </b><a href="app/services\ticket_service.py" target="_blank">app/services\ticket_service.py</a><br>
+    <b>Line number: </b>286<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random" target="_blank">https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random</a><br>
+
+<div class="code">
+<pre>
+285	            random_team   = random.choice(list(BANKING_ROLES_PER_TEAM.keys()))
+286	            random_role   = random.choice(BANKING_ROLES_PER_TEAM[random_team])
+287	            employee_email = f&quot;{random_name.lower().replace(&#x27; &#x27;, &#x27;.&#x27;)}@biat-it.com.tn&quot;
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-29">
+<div class="issue-block issue-sev-low">
+    <b>blacklist: </b> Standard pseudo-random generators are not suitable for security/cryptographic purposes.<br>
+    <b>Test ID:</b> B311<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/330.html" target="_blank">CWE-330</a><br>
+    <b>File: </b><a href="app/services\ticket_service.py" target="_blank">app/services\ticket_service.py</a><br>
+    <b>Line number: </b>288<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random" target="_blank">https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random</a><br>
+
+<div class="code">
+<pre>
+287	            employee_email = f&quot;{random_name.lower().replace(&#x27; &#x27;, &#x27;.&#x27;)}@biat-it.com.tn&quot;
+288	            employee_id   = f&quot;EMP-{random.randint(1000, 9999)}&quot;
+289	            user_seniority = random.choice([&quot;junior&quot;, &quot;senior&quot;])
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-30">
+<div class="issue-block issue-sev-low">
+    <b>blacklist: </b> Standard pseudo-random generators are not suitable for security/cryptographic purposes.<br>
+    <b>Test ID:</b> B311<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/330.html" target="_blank">CWE-330</a><br>
+    <b>File: </b><a href="app/services\ticket_service.py" target="_blank">app/services\ticket_service.py</a><br>
+    <b>Line number: </b>289<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random" target="_blank">https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random</a><br>
+
+<div class="code">
+<pre>
+288	            employee_id   = f&quot;EMP-{random.randint(1000, 9999)}&quot;
+289	            user_seniority = random.choice([&quot;junior&quot;, &quot;senior&quot;])
+290	
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-31">
+<div class="issue-block issue-sev-low">
+    <b>blacklist: </b> Standard pseudo-random generators are not suitable for security/cryptographic purposes.<br>
+    <b>Test ID:</b> B311<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/330.html" target="_blank">CWE-330</a><br>
+    <b>File: </b><a href="app/services\ticket_service.py" target="_blank">app/services\ticket_service.py</a><br>
+    <b>Line number: </b>291<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random" target="_blank">https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random</a><br>
+
+<div class="code">
+<pre>
+290	
+291	        random_envs    = random.sample(ALL_ENVS, random.randint(1, 2))
+292	        random_access  = random.sample(ALL_ACCESS, random.randint(1, 2))
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-32">
+<div class="issue-block issue-sev-low">
+    <b>blacklist: </b> Standard pseudo-random generators are not suitable for security/cryptographic purposes.<br>
+    <b>Test ID:</b> B311<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/330.html" target="_blank">CWE-330</a><br>
+    <b>File: </b><a href="app/services\ticket_service.py" target="_blank">app/services\ticket_service.py</a><br>
+    <b>Line number: </b>291<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random" target="_blank">https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random</a><br>
+
+<div class="code">
+<pre>
+290	
+291	        random_envs    = random.sample(ALL_ENVS, random.randint(1, 2))
+292	        random_access  = random.sample(ALL_ACCESS, random.randint(1, 2))
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-33">
+<div class="issue-block issue-sev-low">
+    <b>blacklist: </b> Standard pseudo-random generators are not suitable for security/cryptographic purposes.<br>
+    <b>Test ID:</b> B311<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/330.html" target="_blank">CWE-330</a><br>
+    <b>File: </b><a href="app/services\ticket_service.py" target="_blank">app/services\ticket_service.py</a><br>
+    <b>Line number: </b>292<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random" target="_blank">https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random</a><br>
+
+<div class="code">
+<pre>
+291	        random_envs    = random.sample(ALL_ENVS, random.randint(1, 2))
+292	        random_access  = random.sample(ALL_ACCESS, random.randint(1, 2))
+293	        application    = random.choices(
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-34">
+<div class="issue-block issue-sev-low">
+    <b>blacklist: </b> Standard pseudo-random generators are not suitable for security/cryptographic purposes.<br>
+    <b>Test ID:</b> B311<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/330.html" target="_blank">CWE-330</a><br>
+    <b>File: </b><a href="app/services\ticket_service.py" target="_blank">app/services\ticket_service.py</a><br>
+    <b>Line number: </b>292<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random" target="_blank">https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random</a><br>
+
+<div class="code">
+<pre>
+291	        random_envs    = random.sample(ALL_ENVS, random.randint(1, 2))
+292	        random_access  = random.sample(ALL_ACCESS, random.randint(1, 2))
+293	        application    = random.choices(
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-35">
+<div class="issue-block issue-sev-low">
+    <b>blacklist: </b> Standard pseudo-random generators are not suitable for security/cryptographic purposes.<br>
+    <b>Test ID:</b> B311<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/330.html" target="_blank">CWE-330</a><br>
+    <b>File: </b><a href="app/services\ticket_service.py" target="_blank">app/services\ticket_service.py</a><br>
+    <b>Line number: </b>293<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random" target="_blank">https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random</a><br>
+
+<div class="code">
+<pre>
+292	        random_access  = random.sample(ALL_ACCESS, random.randint(1, 2))
+293	        application    = random.choices(
+294	            BANKING_APPLICATIONS, weights=[20, 15, 10, 10, 20, 15, 10], k=1
+295	        )[0]
+296	        resource       = random.choices(
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-36">
+<div class="issue-block issue-sev-low">
+    <b>blacklist: </b> Standard pseudo-random generators are not suitable for security/cryptographic purposes.<br>
+    <b>Test ID:</b> B311<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/330.html" target="_blank">CWE-330</a><br>
+    <b>File: </b><a href="app/services\ticket_service.py" target="_blank">app/services\ticket_service.py</a><br>
+    <b>Line number: </b>296<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random" target="_blank">https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random</a><br>
+
+<div class="code">
+<pre>
+295	        )[0]
+296	        resource       = random.choices(
+297	            BANKING_RESOURCES, weights=[15, 15, 15, 15, 10, 10, 20], k=1
+298	        )[0]
+299	
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-37">
+<div class="issue-block issue-sev-low">
+    <b>blacklist: </b> Standard pseudo-random generators are not suitable for security/cryptographic purposes.<br>
+    <b>Test ID:</b> B311<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/330.html" target="_blank">CWE-330</a><br>
+    <b>File: </b><a href="app/services\ticket_service.py" target="_blank">app/services\ticket_service.py</a><br>
+    <b>Line number: </b>324<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random" target="_blank">https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random</a><br>
+
+<div class="code">
+<pre>
+323	
+324	        random_envs   = [random.choices(ALL_ENVS, weights=env_weights, k=1)[0]]
+325	        if random.random() &lt; 0.3:
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-38">
+<div class="issue-block issue-sev-low">
+    <b>blacklist: </b> Standard pseudo-random generators are not suitable for security/cryptographic purposes.<br>
+    <b>Test ID:</b> B311<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/330.html" target="_blank">CWE-330</a><br>
+    <b>File: </b><a href="app/services\ticket_service.py" target="_blank">app/services\ticket_service.py</a><br>
+    <b>Line number: </b>325<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random" target="_blank">https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random</a><br>
+
+<div class="code">
+<pre>
+324	        random_envs   = [random.choices(ALL_ENVS, weights=env_weights, k=1)[0]]
+325	        if random.random() &lt; 0.3:
+326	            second = random.choices(ALL_ENVS, weights=env_weights, k=1)[0]
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-39">
+<div class="issue-block issue-sev-low">
+    <b>blacklist: </b> Standard pseudo-random generators are not suitable for security/cryptographic purposes.<br>
+    <b>Test ID:</b> B311<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/330.html" target="_blank">CWE-330</a><br>
+    <b>File: </b><a href="app/services\ticket_service.py" target="_blank">app/services\ticket_service.py</a><br>
+    <b>Line number: </b>326<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random" target="_blank">https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random</a><br>
+
+<div class="code">
+<pre>
+325	        if random.random() &lt; 0.3:
+326	            second = random.choices(ALL_ENVS, weights=env_weights, k=1)[0]
+327	            if second != random_envs[0]:
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-40">
+<div class="issue-block issue-sev-low">
+    <b>blacklist: </b> Standard pseudo-random generators are not suitable for security/cryptographic purposes.<br>
+    <b>Test ID:</b> B311<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/330.html" target="_blank">CWE-330</a><br>
+    <b>File: </b><a href="app/services\ticket_service.py" target="_blank">app/services\ticket_service.py</a><br>
+    <b>Line number: </b>330<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random" target="_blank">https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random</a><br>
+
+<div class="code">
+<pre>
+329	
+330	        random_access = [random.choices(ALL_ACCESS, weights=access_weights, k=1)[0]]
+331	        if random.random() &lt; 0.2:
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-41">
+<div class="issue-block issue-sev-low">
+    <b>blacklist: </b> Standard pseudo-random generators are not suitable for security/cryptographic purposes.<br>
+    <b>Test ID:</b> B311<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/330.html" target="_blank">CWE-330</a><br>
+    <b>File: </b><a href="app/services\ticket_service.py" target="_blank">app/services\ticket_service.py</a><br>
+    <b>Line number: </b>331<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random" target="_blank">https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random</a><br>
+
+<div class="code">
+<pre>
+330	        random_access = [random.choices(ALL_ACCESS, weights=access_weights, k=1)[0]]
+331	        if random.random() &lt; 0.2:
+332	            second = random.choices(ALL_ACCESS, weights=access_weights, k=1)[0]
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-42">
+<div class="issue-block issue-sev-low">
+    <b>blacklist: </b> Standard pseudo-random generators are not suitable for security/cryptographic purposes.<br>
+    <b>Test ID:</b> B311<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/330.html" target="_blank">CWE-330</a><br>
+    <b>File: </b><a href="app/services\ticket_service.py" target="_blank">app/services\ticket_service.py</a><br>
+    <b>Line number: </b>332<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random" target="_blank">https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random</a><br>
+
+<div class="code">
+<pre>
+331	        if random.random() &lt; 0.2:
+332	            second = random.choices(ALL_ACCESS, weights=access_weights, k=1)[0]
+333	            if second != random_access[0]:
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-43">
+<div class="issue-block issue-sev-low">
+    <b>blacklist: </b> Standard pseudo-random generators are not suitable for security/cryptographic purposes.<br>
+    <b>Test ID:</b> B311<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/330.html" target="_blank">CWE-330</a><br>
+    <b>File: </b><a href="app/services\ticket_service.py" target="_blank">app/services\ticket_service.py</a><br>
+    <b>Line number: </b>336<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random" target="_blank">https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random</a><br>
+
+<div class="code">
+<pre>
+335	
+336	        request_reason  = random.choices(BANKING_REASONS, weights=reason_weights, k=1)[0]
+337	        approval_status = random.choices([&quot;approved&quot;, &quot;pending&quot;, &quot;none&quot;], weights=approval_weights, k=1)[0]
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-44">
+<div class="issue-block issue-sev-low">
+    <b>blacklist: </b> Standard pseudo-random generators are not suitable for security/cryptographic purposes.<br>
+    <b>Test ID:</b> B311<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/330.html" target="_blank">CWE-330</a><br>
+    <b>File: </b><a href="app/services\ticket_service.py" target="_blank">app/services\ticket_service.py</a><br>
+    <b>Line number: </b>337<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random" target="_blank">https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random</a><br>
+
+<div class="code">
+<pre>
+336	        request_reason  = random.choices(BANKING_REASONS, weights=reason_weights, k=1)[0]
+337	        approval_status = random.choices([&quot;approved&quot;, &quot;pending&quot;, &quot;none&quot;], weights=approval_weights, k=1)[0]
+338	
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-45">
+<div class="issue-block issue-sev-low">
+    <b>blacklist: </b> Standard pseudo-random generators are not suitable for security/cryptographic purposes.<br>
+    <b>Test ID:</b> B311<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/330.html" target="_blank">CWE-330</a><br>
+    <b>File: </b><a href="app/services\ticket_service.py" target="_blank">app/services\ticket_service.py</a><br>
+    <b>Line number: </b>345<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random" target="_blank">https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random</a><br>
+
+<div class="code">
+<pre>
+344	        elif application in [&quot;T24&quot;, &quot;MUREX&quot;, &quot;SWIFT&quot;] or env_principal == &quot;PRD&quot;:
+345	            criticite = random.choices([&quot;SENSITIVE&quot;, &quot;CRITIQUE&quot;], weights=[50, 50], k=1)[0]
+346	        elif user_seniority == &quot;senior&quot;:
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-46">
+<div class="issue-block issue-sev-low">
+    <b>blacklist: </b> Standard pseudo-random generators are not suitable for security/cryptographic purposes.<br>
+    <b>Test ID:</b> B311<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/330.html" target="_blank">CWE-330</a><br>
+    <b>File: </b><a href="app/services\ticket_service.py" target="_blank">app/services\ticket_service.py</a><br>
+    <b>Line number: </b>347<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random" target="_blank">https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random</a><br>
+
+<div class="code">
+<pre>
+346	        elif user_seniority == &quot;senior&quot;:
+347	            criticite = random.choices([&quot;BASE&quot;, &quot;SENSITIVE&quot;], weights=[80, 20], k=1)[0]
+348	        else:
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-47">
+<div class="issue-block issue-sev-low">
+    <b>blacklist: </b> Standard pseudo-random generators are not suitable for security/cryptographic purposes.<br>
+    <b>Test ID:</b> B311<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/330.html" target="_blank">CWE-330</a><br>
+    <b>File: </b><a href="app/services\ticket_service.py" target="_blank">app/services\ticket_service.py</a><br>
+    <b>Line number: </b>349<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random" target="_blank">https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random</a><br>
+
+<div class="code">
+<pre>
+348	        else:
+349	            criticite = random.choices([&quot;BASE&quot;, &quot;SENSITIVE&quot;], weights=[55, 45], k=1)[0]
+350	
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-48">
+<div class="issue-block issue-sev-low">
+    <b>blacklist: </b> Standard pseudo-random generators are not suitable for security/cryptographic purposes.<br>
+    <b>Test ID:</b> B311<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/330.html" target="_blank">CWE-330</a><br>
+    <b>File: </b><a href="app/services\ticket_service.py" target="_blank">app/services\ticket_service.py</a><br>
+    <b>Line number: </b>362<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random" target="_blank">https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random</a><br>
+
+<div class="code">
+<pre>
+361	        # Choisir un jour ouvré dans les 5 derniers jours
+362	        days_back = random.randint(0, 4)
+363	        candidate = base_now - timedelta(days=days_back)
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-49">
+<div class="issue-block issue-sev-low">
+    <b>blacklist: </b> Standard pseudo-random generators are not suitable for security/cryptographic purposes.<br>
+    <b>Test ID:</b> B311<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/330.html" target="_blank">CWE-330</a><br>
+    <b>File: </b><a href="app/services\ticket_service.py" target="_blank">app/services\ticket_service.py</a><br>
+    <b>Line number: </b>368<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random" target="_blank">https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random</a><br>
+
+<div class="code">
+<pre>
+367	        # Heure aléatoire entre 08h00 et 17h00
+368	        sim_hour   = random.randint(8, 16)
+369	        sim_minute = random.randint(0, 59)
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-50">
+<div class="issue-block issue-sev-low">
+    <b>blacklist: </b> Standard pseudo-random generators are not suitable for security/cryptographic purposes.<br>
+    <b>Test ID:</b> B311<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/330.html" target="_blank">CWE-330</a><br>
+    <b>File: </b><a href="app/services\ticket_service.py" target="_blank">app/services\ticket_service.py</a><br>
+    <b>Line number: </b>369<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random" target="_blank">https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random</a><br>
+
+<div class="code">
+<pre>
+368	        sim_hour   = random.randint(8, 16)
+369	        sim_minute = random.randint(0, 59)
+370	        employee_submitted_at = candidate.replace(
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-51">
+<div class="issue-block issue-sev-low">
+    <b>blacklist: </b> Standard pseudo-random generators are not suitable for security/cryptographic purposes.<br>
+    <b>Test ID:</b> B311<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/330.html" target="_blank">CWE-330</a><br>
+    <b>File: </b><a href="app/services\ticket_service.py" target="_blank">app/services\ticket_service.py</a><br>
+    <b>Line number: </b>376<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random" target="_blank">https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random</a><br>
+
+<div class="code">
+<pre>
+375	        new_ticket = self.ticket_repo.create({
+376	            &quot;ref&quot;: f&quot;SIM-{datetime.now().strftime(&#x27;%Y%m%d%H%M%S&#x27;)}-{random.randint(100, 999)}&quot;,
+377	            &quot;status&quot;: TicketStatus.NEW,
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-52">
+<div class="issue-block issue-sev-low">
+    <b>try_except_pass: </b> Try, Except, Pass detected.<br>
+    <b>Test ID:</b> B110<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/703.html" target="_blank">CWE-703</a><br>
+    <b>File: </b><a href="app/services\trust_score_service.py" target="_blank">app/services\trust_score_service.py</a><br>
+    <b>Line number: </b>85<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html" target="_blank">https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html</a><br>
+
+<div class="code">
+<pre>
+84	            db.flush()
+85	        except Exception:
+86	            pass  # Colonnes pas encore migrées → ignorer silencieusement
+87	
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-53">
+<div class="issue-block issue-sev-low">
+    <b>blacklist: </b> Consider possible security implications associated with the subprocess module.<br>
+    <b>Test ID:</b> B404<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/78.html" target="_blank">CWE-78</a><br>
+    <b>File: </b><a href="app/tasks\auto_retrain_task.py" target="_blank">app/tasks\auto_retrain_task.py</a><br>
+    <b>Line number: </b>18<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_imports.html#b404-import-subprocess" target="_blank">https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_imports.html#b404-import-subprocess</a><br>
+
+<div class="code">
+<pre>
+17	import sys
+18	import subprocess
+19	from datetime import datetime, timezone
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-54">
+<div class="issue-block issue-sev-low">
+    <b>subprocess_without_shell_equals_true: </b> subprocess call - check for execution of untrusted input.<br>
+    <b>Test ID:</b> B603<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/78.html" target="_blank">CWE-78</a><br>
+    <b>File: </b><a href="app/tasks\auto_retrain_task.py" target="_blank">app/tasks\auto_retrain_task.py</a><br>
+    <b>Line number: </b>77<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/plugins/b603_subprocess_without_shell_equals_true.html" target="_blank">https://bandit.readthedocs.io/en/1.9.4/plugins/b603_subprocess_without_shell_equals_true.html</a><br>
+
+<div class="code">
+<pre>
+76	        # Lancer le script de rétro-entraînement
+77	        result = subprocess.run(
+78	            [venv_python, script_path],
+79	            capture_output=True,
+80	            text=True,
+81	            cwd=base_dir,
+82	            timeout=300,  # Max 5 minutes
+83	        )
+84	
+</pre>
+</div>
+
+
+</div>
+</div>
+
+<div id="issue-55">
+<div class="issue-block issue-sev-low">
+    <b>try_except_pass: </b> Try, Except, Pass detected.<br>
+    <b>Test ID:</b> B110<br>
+    <b>Severity: </b>LOW<br>
+    <b>Confidence: </b>HIGH<br>
+    <b>CWE: </b><a href="https://cwe.mitre.org/data/definitions/703.html" target="_blank">CWE-703</a><br>
+    <b>File: </b><a href="app/tasks\jit_revoke_task.py" target="_blank">app/tasks\jit_revoke_task.py</a><br>
+    <b>Line number: </b>86<br>
+    <b>More info: </b><a href="https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html" target="_blank">https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html</a><br>
+
+<div class="code">
+<pre>
+85	                )
+86	            except Exception:
+87	                pass
+88	
+</pre>
+</div>
+
+
+</div>
+</div>
+
+</div>
+
+</body>
+</html>

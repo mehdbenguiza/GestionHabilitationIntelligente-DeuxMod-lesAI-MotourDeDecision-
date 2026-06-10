@@ -101,7 +101,7 @@ def build_approval_email(
     content = f"""
     <!-- Bannière succès -->
     <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:16px 20px;margin-bottom:28px;display:flex;align-items:center;">
-      <span style="font-size:28px;margin-right:12px;">✅</span>
+      <span style="font-size:28px;margin-right:12px;">[OK]</span>
       <div>
         <div style="color:#166534;font-size:16px;font-weight:700;">Demande d'habilitation APPROUVÉE</div>
         <div style="color:#15803d;font-size:13px;margin-top:2px;">Ticket N° <strong>{ticket_ref}</strong></div>
@@ -163,7 +163,7 @@ def build_approval_email(
           </tr>
         </table>
         <div style="margin-top:16px;padding:12px;background:rgba(251,191,36,0.15);border-radius:6px;border-left:3px solid #fbbf24;">
-          <span style="color:#fde68a;font-size:12px;">⚠️ Ce mot de passe est <strong>temporaire et à usage unique</strong>. Vous serez invité à le modifier lors de votre première connexion. Ne le partagez avec personne.</span>
+          <span style="color:#fde68a;font-size:12px;">[!] Ce mot de passe est <strong>temporaire et à usage unique</strong>. Vous serez invité à le modifier lors de votre première connexion. Ne le partagez avec personne.</span>
         </div>
       </td></tr>
     </table>
@@ -176,7 +176,7 @@ def build_approval_email(
     </div>
     """
 
-    subject = f"[BIAT iTop] ✅ Habilitation approuvée — {ticket_ref} — {application}"
+    subject = f"[BIAT iTop] [OK] Habilitation approuvée — {ticket_ref} — {application}"
     return subject, _html_base(content, subject)
 
 
@@ -200,7 +200,7 @@ def build_rejection_email(
     content = f"""
     <!-- Bannière rejet -->
     <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:16px 20px;margin-bottom:28px;">
-      <span style="font-size:28px;margin-right:12px;">❌</span>
+      <span style="font-size:28px;margin-right:12px;">[X]</span>
       <div style="display:inline-block;vertical-align:middle;">
         <div style="color:#991b1b;font-size:16px;font-weight:700;">Demande d'habilitation REJETÉE</div>
         <div style="color:#b91c1c;font-size:13px;margin-top:2px;">Ticket N° <strong>{ticket_ref}</strong></div>
@@ -248,7 +248,7 @@ def build_rejection_email(
     </div>
     """
 
-    subject = f"[BIAT iTop] ❌ Habilitation rejetée — {ticket_ref} — {application}"
+    subject = f"[BIAT iTop] [X] Habilitation rejetée — {ticket_ref} — {application}"
     return subject, _html_base(content, subject)
 
 
@@ -269,7 +269,7 @@ def send_email(to_address: str, subject: str, html_body: str) -> bool:
     actual_recipient = settings.SMTP_USERNAME if settings.ENVIRONMENT == "development" else to_address
 
     if not settings.SMTP_USERNAME or not settings.SMTP_PASSWORD:
-        print(f"⚠️  [EMAIL] SMTP non configuré. Email non envoyé (destinataire simulé : {to_address})")
+        print(f"[!]  [EMAIL] SMTP non configur. Email non envoy (destinataire simul : {to_address})")
         print(f"   Sujet : {subject}")
         return False
 
@@ -301,7 +301,7 @@ def send_email(to_address: str, subject: str, html_body: str) -> bool:
                     img.add_header('Content-Disposition', 'inline', filename='biat.png')
                     msg.attach(img)
             except Exception as e:
-                print(f"⚠️ Erreur lors de l'attachement du logo: {e}")
+                print(f"[!] Erreur lors de l'attachement du logo: {e}")
 
         # Ajouter le corps HTML (qui fait reference au cid:biatlogo)
         msg.attach(MIMEText(html_body, "html", "utf-8"))
@@ -313,19 +313,19 @@ def send_email(to_address: str, subject: str, html_body: str) -> bool:
             server.sendmail(settings.EMAIL_FROM, actual_recipient, msg.as_string())
 
         if settings.ENVIRONMENT == "development":
-            print(f"✅ [EMAIL] Envoyé à {actual_recipient} (destinataire réel : {to_address})")
+            print(f"[OK] [EMAIL] Envoy  {actual_recipient} (destinataire rel : {to_address})")
         else:
-            print(f"✅ [EMAIL] Envoyé à {to_address}")
+            print(f"[OK] [EMAIL] Envoy  {to_address}")
 
         return True
 
     except smtplib.SMTPRecipientsRefused as e:
-        print(f"❌ [EMAIL] Destinataire refusé : {e}")
+        print(f"[X] [EMAIL] Destinataire refus : {e}")
     except smtplib.SMTPAuthenticationError:
-        print("❌ [EMAIL] Erreur d'authentification SMTP — Vérifiez SMTP_USERNAME/SMTP_PASSWORD dans .env")
+        print("[X] [EMAIL] Erreur d'authentification SMTP  Vrifiez SMTP_USERNAME/SMTP_PASSWORD dans .env")
     except smtplib.SMTPException as e:
-        print(f"❌ [EMAIL] Erreur SMTP : {e}")
+        print(f"[X] [EMAIL] Erreur SMTP : {e}")
     except Exception as e:
-        print(f"❌ [EMAIL] Erreur inattendue : {e}")
+        print(f"[X] [EMAIL] Erreur inattendue : {e}")
 
     return False

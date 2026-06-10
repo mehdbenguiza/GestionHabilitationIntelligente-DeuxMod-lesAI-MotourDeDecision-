@@ -46,8 +46,24 @@ class Ticket(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     synced_at = Column(DateTime(timezone=True))
 
+    # ── Modèle 2 : Traçabilité de la source ─────────────────────────────────
+    # "ITOP"             → ticket syncé depuis iTop (simulation externe)
+    # "EMPLOYEE_PORTAL"  → ticket soumis directement par l'employé via /employee
+    # "ADMIN_SIMULATION" → ticket généré par l'admin depuis le dashboard (test)
+    source = Column(String(30), default="ITOP", nullable=False)
+
+    # Timestamp de soumission RÉELLE par l'employé dans iTop (indépendant de created_at)
+    # C'est ce timestamp que le modèle d'anomalie analyse (pas created_at).
+    # Pour ADMIN_SIMULATION : None (pas analysé)
+    # Pour EMPLOYEE_PORTAL  : datetime.now() au moment de la soumission du formulaire
+    # Pour ITOP             : timestamp de création du ticket dans iTop
+    employee_submitted_at = Column(DateTime(timezone=True), nullable=True)
+
     # ✅ Relation avec le moteur IA (Historique des analyses)
     classifications = relationship("ClassificationResult", back_populates="ticket", order_by="desc(ClassificationResult.processed_at)", cascade="all, delete-orphan")
+
+    # ✅ Relation avec le journal d'anomalies (Modèle 2)
+    anomaly_logs = relationship("AnomalyLog", back_populates="ticket", order_by="desc(AnomalyLog.analyzed_at)", cascade="all, delete-orphan")
 
     @property
     def classification(self):

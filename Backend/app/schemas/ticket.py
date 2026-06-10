@@ -89,3 +89,11 @@ class TicketResponse(TicketBase):
     ai_explanation: Optional[str] = None
     ai_risk_factors: Optional[Dict[str, Any]] = None
     ai_source: Optional[str] = None
+
+    # ── Modèle 2 : Champs Anomalie Comportementale ───────────────────────────
+    source: Optional[str] = None                        # ITOP | EMPLOYEE_PORTAL | ADMIN_SIMULATION
+    employee_submitted_at: Optional[datetime] = None    # Timestamp réel de soumission employé
+    is_anomalous: Optional[bool] = None                 # True si anomalie détectée
+    anomaly_severity: Optional[str] = None              # NONE | LOW | MEDIUM | HIGH | CRITICAL
+    anomaly_flags: Optional[List[str]] = None           # ["ANOMALY_OUT_OF_HOURS", ...]
+    anomaly_score: Optional[float] = None               # Score Isolation Forest (-1 anormal, +1 normal)

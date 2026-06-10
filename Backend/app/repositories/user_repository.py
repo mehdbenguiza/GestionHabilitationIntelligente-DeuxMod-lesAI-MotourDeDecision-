@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from typing import Optional, List
 from app.repositories.base import BaseRepository
 from app.models.user import DashboardUser, Role
-from datetime import datetime
+from datetime import datetime, timezone
 
 class UserRepository(BaseRepository[DashboardUser]):
     def __init__(self, db: Session):
@@ -32,7 +32,7 @@ class UserRepository(BaseRepository[DashboardUser]):
 
     def update_last_login(self, user_id: int, ip: str) -> Optional[DashboardUser]:
         return self.update(user_id, {
-            "lastLogin": datetime.utcnow(),
+            "lastLogin": datetime.now(timezone.utc),
             "lastLoginIP": ip
         })
 
@@ -42,7 +42,7 @@ class UserRepository(BaseRepository[DashboardUser]):
     def update_refresh_token(self, user_id: int, refresh_token: str) -> Optional[DashboardUser]:
         return self.update(user_id, {
             "refresh_token": refresh_token,
-            "refresh_token_created_at": datetime.utcnow()
+            "refresh_token_created_at": datetime.now(timezone.utc)
         })
 
     def clear_refresh_token(self, user_id: int) -> Optional[DashboardUser]:

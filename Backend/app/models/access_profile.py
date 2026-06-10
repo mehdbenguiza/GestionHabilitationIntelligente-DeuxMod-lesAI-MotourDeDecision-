@@ -52,6 +52,10 @@ class AccessProfile(Base):
     revoked_at    = Column(DateTime(timezone=True), nullable=True)
     expires_at    = Column(DateTime(timezone=True), nullable=True)  # NULL = permanent
 
+    # ── V3.0 : JIT Access (Accès Temporaires) ────────────────────────────────
+    expiry_hours  = Column(Integer,  nullable=True)  # Durée en heures (None = permanent)
+    auto_revoked  = Column(Boolean,  default=False)   # True si révoqué par la tâche JIT
+
     # --- Email envoyé ---
     notification_sent    = Column(Boolean, default=False)
     notification_sent_at = Column(DateTime(timezone=True), nullable=True)
